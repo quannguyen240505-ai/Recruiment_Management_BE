@@ -97,4 +97,50 @@ public class RegisterValidationTests
 
         Assert.NotEmpty(errors);
     }
+
+
+[Theory]
+    [InlineData("Email")]
+    [InlineData("PhoneNumber")]
+    [InlineData("Password")]
+    [InlineData("ConfirmPassword")]
+    public void Register_MissingRequiredField_ShouldFail(string field)
+    {
+        var request = ValidRequest();
+
+        switch (field)
+        {
+            case "Email":
+                request.Email = "";
+                break;
+            case "PhoneNumber":
+                request.PhoneNumber = "";
+                break;
+            case "Password":
+                request.Password = "";
+                break;
+            case "ConfirmPassword":
+                request.ConfirmPassword = "";
+                break;
+        }
+
+        var errors = Validate(request);
+
+        Assert.Contains(errors,
+            error => error.MemberNames.Contains(field));
+    }
+
+    [Theory]
+    [InlineData("abc")]
+    [InlineData("123")]
+    public void Register_InvalidPhoneNumber_ShouldFail(string phone)
+    {
+        var request = ValidRequest();
+        request.PhoneNumber = phone;
+
+        var errors = Validate(request);
+
+        Assert.Contains(errors,
+            error => error.MemberNames.Contains(nameof(RegisterRequest.PhoneNumber)));
+    }
 }
