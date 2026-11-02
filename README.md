@@ -15,7 +15,7 @@ dotnet restore
 dotnet run --project src/Recruitment.Api --launch-profile https
 ```
 - Swagger: https://localhost:7080/swagger (môi trường Development)
-- Kiểm tra sống: `GET https://localhost:7080/api/v1/health` và `GET https://localhost:7080/health`
+- Kiểm tra sống: `GET https://localhost:7080/api/health` và `GET https://localhost:7080/health`
 
 Lần đầu chạy https, nếu trình duyệt cảnh báo chứng chỉ: `dotnet dev-certs https --trust`.
 
