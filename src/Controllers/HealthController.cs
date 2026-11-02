@@ -4,7 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 namespace Recruitment.Api.Controllers;
 
 [ApiController]
-[Route("api/v1/health")]
+[Route("api/health")]
 public class HealthController(IWebHostEnvironment env) : ControllerBase
 {
     /// <summary>Kiểm tra backend đang chạy. Không cần đăng nhập, không trả thông tin nhạy cảm.</summary>
