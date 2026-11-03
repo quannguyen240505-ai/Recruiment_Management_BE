@@ -13,7 +13,8 @@ public class HealthController(IWebHostEnvironment env) : ControllerBase
     {
         status = "Healthy",
         service = "Recruitment.Api",
-        version = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "unknown",
+        version = Assembly.GetExecutingAssembly().GetName().Version?.ToString() ?? "un" +
+        "known",
         environment = env.EnvironmentName,
         timestamp = DateTime.UtcNow
     });
