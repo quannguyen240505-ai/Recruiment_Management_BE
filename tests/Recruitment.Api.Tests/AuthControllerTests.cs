@@ -44,6 +44,26 @@ public class AuthControllerTests
         Assert.Same(expected, response.Value);
     }
 
+    [Theory]
+    [InlineData("Email đã tồn tại.")]
+    [InlineData("Tên đăng nhập đã tồn tại.")]
+    public async Task Register_DuplicateAccount_ShouldReturn409(string message)
+    {
+        var controller = new AuthController(
+            new FakeConflictAuthService(message));
+
+        var result = await controller.Register(
+            new RegisterRequest(), CancellationToken.None);
+
+        var response = Assert.IsType<ConflictObjectResult>(result.Result);
+        Assert.Equal(StatusCodes.Status409Conflict, response.StatusCode);
+
+        var problem = Assert.IsType<ProblemDetails>(response.Value);
+        Assert.Equal(StatusCodes.Status409Conflict, problem.Status);
+        Assert.Equal(message, problem.Detail);
+    }
+
+
     private sealed class FakeAuthService : IAuthService
     {
         private readonly RegisterResponse _response;
@@ -60,4 +80,23 @@ public class AuthControllerTests
             return Task.FromResult(_response);
         }
     }
+
+    private sealed class FakeConflictAuthService : IAuthService
+    {
+        private readonly string _message;
+
+        public FakeConflictAuthService(string message)
+        {
+            _message = message;
+        }
+
+        public Task<RegisterResponse> RegisterAsync(
+            RegisterRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            return Task.FromException<RegisterResponse>(
+                new RegistrationConflictException(_message));
+        }
+    }
+
 }

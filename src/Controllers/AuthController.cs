@@ -17,15 +17,29 @@ public class AuthController : ControllerBase
         _authService = authService;
     }
 
+
     [HttpPost("register")]
     [AllowAnonymous]
     public async Task<ActionResult<RegisterResponse>> Register(
         [FromBody] RegisterRequest request,
         CancellationToken cancellationToken)
     {
-        var response = await _authService.RegisterAsync(
-            request, cancellationToken);
+        try
+        {
+            var response = await _authService.RegisterAsync(
+                request, cancellationToken);
 
-        return StatusCode(StatusCodes.Status201Created, response);
+            return StatusCode(StatusCodes.Status201Created, response);
+        }
+        catch (RegistrationConflictException ex)
+        {
+            return Conflict(new ProblemDetails
+            {
+                Status = StatusCodes.Status409Conflict,
+                Title = "Tài khoản đã tồn tại",
+                Detail = ex.Message
+            });
+        }
     }
+
 }

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Recruitment.Api.Data;
 using Microsoft.AspNetCore.Identity;
 using Recruitment.Api.Entities;
+using Recruitment.Api.Services.Auth;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,6 +26,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
+builder.Services.AddScoped<IAuthService, AuthService>();
 // -----------------------------------------------
 // TODO SCRUM-129: AddAuthentication (JWT), AddCors, API conventions
 // TODO: đăng ký các service nghiệp vụ tại đây, ví dụ:
