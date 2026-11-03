@@ -22,10 +22,7 @@ builder.Services.AddHealthChecks();
 
 // --- CẤU HÌNH DATABASE & BẢO MẬT (SCRUM-128) ---
 builder.Services.AddDbContext<AppDbContext>(options =>
-{
-    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-    options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString));
-});
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 // -----------------------------------------------
