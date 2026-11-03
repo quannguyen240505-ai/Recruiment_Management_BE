@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Recruitment.Api.Data;
 using Recruitment.Api.Dtos.Auth;
 using Recruitment.Api.Entities;
+using Microsoft.Data.SqlClient;
 
 namespace Recruitment.Api.Services.Auth;
 
@@ -50,7 +51,19 @@ public class AuthService : IAuthService
             user, request.Password);
 
         _db.Users.Add(user);
-        await _db.SaveChangesAsync(cancellationToken);
+
+        try
+        {
+            await _db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex)
+            when (ex.InnerException is SqlException sqlEx
+                  && (sqlEx.Number == 2601 || sqlEx.Number == 2627))
+        {
+            throw new RegistrationConflictException(
+                "Email hoặc tên đăng nhập đã tồn tại.");
+        }
+
 
         return new RegisterResponse
         {
