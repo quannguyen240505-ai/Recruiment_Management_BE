@@ -68,6 +68,14 @@ public class AuthControllerTests
     {
         private readonly RegisterResponse _response;
 
+        public Task<LoginResponse> LoginAsync(
+            LoginRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotImplementedException();
+        }
+
+
         public FakeAuthService(RegisterResponse response)
         {
             _response = response;
@@ -84,6 +92,13 @@ public class AuthControllerTests
     private sealed class FakeConflictAuthService : IAuthService
     {
         private readonly string _message;
+
+        public Task<LoginResponse> LoginAsync(
+            LoginRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotImplementedException();
+        }
 
         public FakeConflictAuthService(string message)
         {
