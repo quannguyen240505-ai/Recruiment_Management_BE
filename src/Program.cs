@@ -4,6 +4,9 @@ using Microsoft.EntityFrameworkCore;
 using Recruitment.Api.Data;
 using Microsoft.AspNetCore.Identity;
 using Recruitment.Api.Entities;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,7 +29,36 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 // -----------------------------------------------
-// TODO SCRUM-129: AddAuthentication (JWT), AddCors, API conventions
+// --- CẤU HÌNH CORS (Cho phép Angular gọi API) ---
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowAngular", policy =>
+    {
+        policy.WithOrigins("http://localhost:4200") // Cổng mặc định của Angular
+              .AllowAnyHeader()
+              .AllowAnyMethod()
+              .AllowCredentials();
+    });
+});
+
+// --- CẤU HÌNH JWT AUTHENTICATION ---
+var jwtSecret = builder.Configuration["Jwt:Secret"] ?? throw new InvalidOperationException("JWT Secret is not configured.");
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidAudience = builder.Configuration["Jwt:Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret))
+        };
+    });
+
+builder.Services.AddAuthorization();
 // TODO: đăng ký các service nghiệp vụ tại đây, ví dụ:
 // builder.Services.AddScoped<IJobService, JobService>();
 
@@ -40,7 +72,10 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
-// TODO SCRUM-129: app.UseCors(...); app.UseAuthentication();
+app.UseCors("AllowAngular");
+
+app.UseAuthentication();
+app.UseAuthorization();
 app.UseAuthorization();
 
 app.MapControllers();
