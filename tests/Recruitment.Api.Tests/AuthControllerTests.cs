@@ -1,4 +1,5 @@
 
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Recruitment.Api.Controllers;
@@ -10,6 +11,7 @@ namespace Recruitment.Api.Tests;
 
 public class AuthControllerTests
 {
+    // TEST 1: Đăng ký thành công
     [Fact]
     public async Task Register_Success_ShouldReturn201()
     {
@@ -44,10 +46,12 @@ public class AuthControllerTests
         Assert.Same(expected, response.Value);
     }
 
+    // TEST 2: Đăng ký trùng tài khoản
     [Theory]
     [InlineData("Email đã tồn tại.")]
     [InlineData("Tên đăng nhập đã tồn tại.")]
-    public async Task Register_DuplicateAccount_ShouldReturn409(string message)
+    public async Task Register_DuplicateAccount_ShouldReturn409(
+        string message)
     {
         var controller = new AuthController(
             new FakeConflictAuthService(message));
@@ -56,6 +60,7 @@ public class AuthControllerTests
             new RegisterRequest(), CancellationToken.None);
 
         var response = Assert.IsType<ConflictObjectResult>(result.Result);
+
         Assert.Equal(StatusCodes.Status409Conflict, response.StatusCode);
 
         var problem = Assert.IsType<ProblemDetails>(response.Value);
@@ -63,6 +68,40 @@ public class AuthControllerTests
         Assert.Equal(message, problem.Detail);
     }
 
+    // TEST 3: Logout thành công trả HTTP 204
+    [Fact]
+    public void Logout_ShouldReturn204NoContent()
+    {
+        var controller = new AuthController(
+            new FakeAuthService(new RegisterResponse()));
+
+        var result = controller.Logout();
+
+        Assert.IsType<NoContentResult>(result);
+    }
+
+    // TEST 4: Logout bắt buộc xác thực JWT
+    [Fact]
+    public void Logout_ShouldRequireAuthorization()
+    {
+        var method = typeof(AuthController)
+            .GetMethod(nameof(AuthController.Logout));
+
+        Assert.NotNull(method);
+
+        Assert.True(Attribute.IsDefined(
+            method, typeof(AuthorizeAttribute)));
+
+        Assert.False(Attribute.IsDefined(
+            method, typeof(AllowAnonymousAttribute)));
+
+        var httpPost = Assert.Single(
+            method.GetCustomAttributes(
+                typeof(HttpPostAttribute), false)
+            .Cast<HttpPostAttribute>());
+
+        Assert.Equal("logout", httpPost.Template);
+    }
 
     private sealed class FakeAuthService : IAuthService
     {
@@ -113,5 +152,4 @@ public class AuthControllerTests
                 new RegistrationConflictException(_message));
         }
     }
-
 }
