@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using Recruitment.Api.Entities;
 
-namespace Recruitment.Api.Dtos;
+namespace Recruitment.Api.Dtos.Job;
 
 public class CreateJobRequest
 {
@@ -18,7 +18,7 @@ public class CreateJobRequest
     public string Location { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "JobType không được để trống")]
-    public JobType JobType { get; set; }
+    public JobType? JobType { get; set; }
 
     [Required(ErrorMessage = "Experience không được để trống")]
     public string Experience { get; set; } = string.Empty;

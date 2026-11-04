@@ -1,7 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Recruitment.Api.Data;
-using Recruitment.Api.Dtos;
+using Recruitment.Api.Dtos.Job;
 using Recruitment.Api.Entities;
 using Recruitment.Api.Services.Jobs;
 
@@ -104,6 +104,37 @@ public class JobServiceTests : IDisposable
         _db.SaveChanges();
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => _jobService.CreateJobAsync(GetValidRequest(), "REC-02"));
+    }
+    [Fact]
+    public async Task CreateJob_RecruiterLocked_Throws()
+    {
+        var rec = await _db.Users.FindAsync("REC-01");
+        rec!.AccountStatus = AccountStatus.LOCKED;
+        await _db.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            _jobService.CreateJobAsync(GetValidRequest(), "REC-01"));
+    }
+
+    [Fact]
+    public async Task CreateJob_CompanyNotExists_Throws()
+    {
+        var comp = await _db.Companies.FindAsync("COMP-01");
+        _db.Companies.Remove(comp!);
+        await _db.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _jobService.CreateJobAsync(GetValidRequest(), "REC-01"));
+    }
+
+    [Fact]
+    public async Task CreateJob_NullSkillIds_Throws()
+    {
+        var req = GetValidRequest();
+        req.SkillIds = null!;
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            _jobService.CreateJobAsync(req, "REC-01"));
     }
 
     public void Dispose()

@@ -1,4 +1,4 @@
-namespace Recruitment.Api.Dtos;
+namespace Recruitment.Api.Dtos.Job;
 
 public class JobResponse
 {

@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Recruitment.Api.Dtos;
+using Recruitment.Api.Dtos.Job;
 using Recruitment.Api.Services.Jobs;
 using System.Security.Claims;
 

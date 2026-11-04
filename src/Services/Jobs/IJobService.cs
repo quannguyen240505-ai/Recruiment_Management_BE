@@ -1,4 +1,4 @@
-using Recruitment.Api.Dtos;
+using Recruitment.Api.Dtos.Job;
 
 namespace Recruitment.Api.Services.Jobs;
 
