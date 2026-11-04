@@ -17,7 +17,6 @@ public class AuthController : ControllerBase
         _authService = authService;
     }
 
-
     [HttpPost("register")]
     [AllowAnonymous]
     public async Task<ActionResult<RegisterResponse>> Register(
@@ -42,4 +41,13 @@ public class AuthController : ControllerBase
         }
     }
 
+    // SCRUM-124: Stateless Logout
+    [HttpPost("logout")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public IActionResult Logout()
+    {
+        return NoContent();
+    }
 }
