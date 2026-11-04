@@ -175,6 +175,69 @@ public class JobServiceTests : IDisposable
         Assert.Contains(results, r => r.MemberNames.Contains("JobType"));
     }
 
+    [Fact]
+    public async Task GetJobDetail_OpenJob_ReturnsDetails()
+    {
+        var created = await _jobService.CreateJobAsync(
+            GetValidRequest(), "REC-01");
+
+        var result = await _jobService.GetJobDetailAsync(created.JobId);
+
+        Assert.NotNull(result);
+        Assert.Equal(created.JobId, result.JobId);
+        Assert.Equal("Senior Dev", result.Title);
+        Assert.Equal("OPEN", result.Status);
+        Assert.Equal("Test Company", result.Company.Name);
+
+        Assert.Contains(result.Skills,
+            s => s.SkillId == "SKILL-01" && s.Name == "C#");
+    }
+
+    [Fact]
+    public async Task GetJobDetail_NotFound_ReturnsNull()
+    {
+        var result = await _jobService.GetJobDetailAsync(
+            "JOB-NOT-EXIST");
+
+        Assert.Null(result);
+    }
+
+    [Theory]
+    [InlineData(JobStatus.CLOSED)]
+    [InlineData(JobStatus.PAUSED)]
+    public async Task GetJobDetail_NotOpen_ReturnsNull(JobStatus status)
+    {
+        var created = await _jobService.CreateJobAsync(
+            GetValidRequest(), "REC-01");
+
+        var job = await _db.Jobs.FindAsync(created.JobId);
+        Assert.NotNull(job);
+
+        job.Status = status;
+        await _db.SaveChangesAsync();
+
+        var result = await _jobService.GetJobDetailAsync(created.JobId);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task GetJobDetail_ExpiredJob_ReturnsNull()
+    {
+        var created = await _jobService.CreateJobAsync(
+            GetValidRequest(), "REC-01");
+
+        var job = await _db.Jobs.FindAsync(created.JobId);
+        Assert.NotNull(job);
+
+        job.Deadline = DateTime.UtcNow.AddDays(-1);
+        await _db.SaveChangesAsync();
+
+        var result = await _jobService.GetJobDetailAsync(created.JobId);
+
+        Assert.Null(result);
+    }
+
     public void Dispose()
     {
         _db.Dispose();
