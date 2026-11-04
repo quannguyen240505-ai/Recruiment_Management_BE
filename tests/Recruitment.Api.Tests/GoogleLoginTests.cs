@@ -243,6 +243,67 @@ public class GoogleLoginTests
             () => validator.ValidateAsync("invalid-google-token"));
     }
 
+    [Fact]
+    public async Task GoogleTokenValidator_MissingClientId_ShouldReject()
+    {
+        var configuration = new ConfigurationBuilder().Build();
+
+        var validator = new GoogleTokenValidator(configuration);
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => validator.ValidateAsync("fake-test-token"));
+
+        Assert.Equal(
+            "Google Client ID chưa được cấu hình.",
+            exception.Message);
+    }
+
+    [Fact]
+    public void GoogleTokenValidator_UnverifiedEmail_ShouldReject()
+    {
+        var payload = new GoogleJsonWebSignature.Payload
+        {
+            Subject = "google-user-123",
+            Email = "test@gmail.com",
+            EmailVerified = false
+        };
+
+        Assert.Throws<UnauthorizedAccessException>(
+            () => GoogleTokenValidator.ValidateGoogleClaims(payload));
+    }
+
+    [Fact]
+    public void GoogleTokenValidator_ExpiredToken_ShouldReject()
+    {
+        var now = DateTimeOffset.FromUnixTimeSeconds(2_000_000_000);
+
+        var payload = new GoogleJsonWebSignature.Payload
+        {
+            Audience = "correct-client-id",
+            ExpirationTimeSeconds = now.ToUnixTimeSeconds() - 1
+        };
+
+        Assert.Throws<UnauthorizedAccessException>(() =>
+            GoogleTokenValidator.ValidateTokenMetadata(
+                payload, "correct-client-id", now));
+    }
+
+    [Fact]
+    public void GoogleTokenValidator_WrongAudience_ShouldReject()
+    {
+        var now = DateTimeOffset.FromUnixTimeSeconds(2_000_000_000);
+
+        var payload = new GoogleJsonWebSignature.Payload
+        {
+            Audience = "other-client-id",
+            ExpirationTimeSeconds = now.ToUnixTimeSeconds() + 3600
+        };
+
+        Assert.Throws<UnauthorizedAccessException>(() =>
+            GoogleTokenValidator.ValidateTokenMetadata(
+                payload, "correct-client-id", now));
+    }
+
     private sealed class FakeGoogleTokenValidator : IGoogleTokenValidator
     {
         private readonly GoogleJsonWebSignature.Payload _payload;

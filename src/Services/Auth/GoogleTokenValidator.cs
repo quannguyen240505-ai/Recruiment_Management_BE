@@ -40,14 +40,8 @@ public sealed class GoogleTokenValidator : IGoogleTokenValidator
             var payload = await GoogleJsonWebSignature.ValidateAsync(
                 idToken, settings);
 
-            if (string.IsNullOrWhiteSpace(payload.Subject) ||
-                string.IsNullOrWhiteSpace(payload.Email) ||
-                !payload.EmailVerified)
-            {
-                throw new UnauthorizedAccessException(
-                    "Không thể xác minh tài khoản Google.");
-            }
-
+            ValidateGoogleClaims(payload);
+            ValidateTokenMetadata(payload, clientId, DateTimeOffset.UtcNow);
             return payload;
         }
         catch (InvalidJwtException ex)
@@ -56,4 +50,38 @@ public sealed class GoogleTokenValidator : IGoogleTokenValidator
                 "Google ID Token không hợp lệ hoặc đã hết hạn.", ex);
         }
     }
+
+    public static void ValidateGoogleClaims(
+        GoogleJsonWebSignature.Payload payload)
+    {
+        if (payload == null ||
+            string.IsNullOrWhiteSpace(payload.Subject) ||
+            string.IsNullOrWhiteSpace(payload.Email) ||
+            !payload.EmailVerified)
+        {
+            throw new UnauthorizedAccessException(
+                "Không thể xác minh tài khoản Google.");
+        }
+    }
+
+    public static void ValidateTokenMetadata(
+        GoogleJsonWebSignature.Payload payload,
+        string expectedAudience,
+        DateTimeOffset now)
+    {
+        if (!payload.AudienceAsList.Contains(
+                expectedAudience, StringComparer.Ordinal))
+        {
+            throw new UnauthorizedAccessException(
+                "Google ID Token sai Audience.");
+        }
+
+        if (!payload.ExpirationTimeSeconds.HasValue ||
+            payload.ExpirationTimeSeconds.Value <= now.ToUnixTimeSeconds())
+        {
+            throw new UnauthorizedAccessException(
+                "Google ID Token đã hết hạn.");
+        }
+    }
+
 }
