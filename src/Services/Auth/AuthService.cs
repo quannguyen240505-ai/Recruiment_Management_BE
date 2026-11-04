@@ -14,16 +14,21 @@ public class AuthService : IAuthService
     private readonly AppDbContext _db;
     private readonly IPasswordHasher<User> _passwordHasher;
     private readonly JwtTokenService _jwtTokenService;
+    private readonly IGoogleTokenValidator? _googleTokenValidator;
+
 
     public AuthService(
         AppDbContext db,
         IPasswordHasher<User> passwordHasher,
-        JwtTokenService jwtTokenService)
+        JwtTokenService jwtTokenService,
+        IGoogleTokenValidator? googleTokenValidator = null)
     {
         _db = db;
         _passwordHasher = passwordHasher;
         _jwtTokenService = jwtTokenService;
+        _googleTokenValidator = googleTokenValidator;
     }
+
 
 
     public async Task<RegisterResponse> RegisterAsync(
@@ -174,6 +179,92 @@ public class AuthService : IAuthService
         user.UpdatedAtUtc = DateTime.UtcNow;
 
         await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<LoginResponse> GoogleLoginAsync(
+        GoogleLoginRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (_googleTokenValidator == null)
+            throw new InvalidOperationException(
+                "Google Token Validator chưa được cấu hình.");
+
+        // 1. Xác minh Google ID Token
+        var payload = await _googleTokenValidator.ValidateAsync(
+            request.IdToken);
+
+        var googleId = payload.Subject;
+        var email = payload.Email.Trim().ToLowerInvariant();
+
+        // 2. Tìm tài khoản đã liên kết Google
+        var user = await _db.Users.SingleOrDefaultAsync(
+            u => u.GoogleId == googleId,
+            cancellationToken);
+
+        if (user == null)
+        {
+            // Không tự động liên kết chỉ vì trùng email
+            var emailExists = await _db.Users.AnyAsync(
+                u => u.Email == email,
+                cancellationToken);
+
+            if (emailExists)
+                throw new RegistrationConflictException(
+                    "Email đã được sử dụng bởi tài khoản khác.");
+
+            // 3. Tạo tài khoản Google lần đầu
+            var fullName = string.IsNullOrWhiteSpace(payload.Name)
+                ? email
+                : payload.Name.Trim();
+
+            user = new User
+            {
+                UserId = Guid.NewGuid().ToString(),
+                Username = "google_" + Guid.NewGuid().ToString("N"),
+                Email = email,
+                FullName = fullName[..Math.Min(fullName.Length, 200)],
+                GoogleId = googleId,
+                PasswordHash = null,
+                RoleId = "CANDIDATE",
+                AccountStatus = AccountStatus.ACTIVE,
+                CreatedAtUtc = DateTime.UtcNow
+            };
+
+            _db.Users.Add(user);
+
+            try
+            {
+                await _db.SaveChangesAsync(cancellationToken);
+            }
+            catch (DbUpdateException ex)
+                when (ex.InnerException is SqlException sqlEx &&
+                      (sqlEx.Number == 2601 || sqlEx.Number == 2627))
+            {
+                throw new RegistrationConflictException(
+                    "Tài khoản Google hoặc email đã tồn tại.");
+            }
+        }
+
+        // 4. Kiểm tra trạng thái tài khoản
+        if (user.AccountStatus != AccountStatus.ACTIVE ||
+            user.DeletedAtUtc != null)
+        {
+            throw new UnauthorizedAccessException(
+                "Tài khoản không khả dụng.");
+        }
+
+        // 5. Cấp JWT nội bộ
+        var (token, expiresAt) = _jwtTokenService.CreateToken(user);
+
+        return new LoginResponse
+        {
+            AccessToken = token,
+            TokenType = "Bearer",
+            ExpiresAtUtc = expiresAt,
+            UserId = user.UserId,
+            Username = user.Username,
+            Role = user.RoleId
+        };
     }
 
 }

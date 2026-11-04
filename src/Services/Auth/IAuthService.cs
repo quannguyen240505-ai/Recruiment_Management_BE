@@ -17,4 +17,8 @@ public interface IAuthService
         string userId,
         ChangePasswordRequest request,
         CancellationToken cancellationToken = default);
+
+    Task<LoginResponse> GoogleLoginAsync(
+       GoogleLoginRequest request,
+       CancellationToken cancellationToken = default);
 }
