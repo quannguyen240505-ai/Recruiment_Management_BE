@@ -9,6 +9,11 @@ public class AppDbContext : DbContext
 
     public DbSet<User> Users => Set<User>();
     public DbSet<Role> Roles => Set<Role>();
+    public DbSet<Company> Companies => Set<Company>();
+    public DbSet<Category> Categories => Set<Category>();
+    public DbSet<Skill> Skills => Set<Skill>();
+    public DbSet<Job> Jobs => Set<Job>();
+    public DbSet<JobSkill> JobSkills => Set<JobSkill>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -23,6 +28,21 @@ public class AppDbContext : DbContext
                 new Role { RoleId = "CANDIDATE", RoleName = "Candidate", Description = "Ứng viên" },
                 new Role { RoleId = "RECRUITER", RoleName = "Recruiter", Description = "Nhà tuyển dụng" },
                 new Role { RoleId = "ADMIN", RoleName = "Admin", Description = "Quản trị viên" });
+
+            modelBuilder.Entity<JobSkill>(e =>
+            {
+                e.HasKey(js => new { js.JobId, js.SkillId });
+                e.HasOne(js => js.Job).WithMany(j => j.JobSkills).HasForeignKey(js => js.JobId);
+                e.HasOne(js => js.Skill).WithMany(s => s.JobSkills).HasForeignKey(js => js.SkillId);
+            });
+
+            modelBuilder.Entity<Job>(e =>
+            {
+                e.Property(x => x.JobType).HasConversion<string>();
+                e.Property(x => x.Status).HasConversion<string>();
+                e.Property(x => x.SalaryMin).HasColumnType("decimal(18,2)");
+                e.Property(x => x.SalaryMax).HasColumnType("decimal(18,2)");
+            });
         });
 
         modelBuilder.Entity<User>(e =>
