@@ -59,6 +59,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 builder.Services.AddScoped<IPasswordHasher<User>, PasswordHasher<User>>();
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<JwtTokenService>();
 
 // --- CẤU HÌNH CORS (Cho phép Angular gọi API) ---
 builder.Services.AddCors(options =>
