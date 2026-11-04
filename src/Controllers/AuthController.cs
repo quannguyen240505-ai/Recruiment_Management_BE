@@ -1,9 +1,9 @@
 
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Recruitment.Api.Dtos.Auth;
 using Recruitment.Api.Services.Auth;
-using System.Security.Claims;
 
 namespace Recruitment.Api.Controllers;
 
@@ -18,6 +18,7 @@ public class AuthController : ControllerBase
         _authService = authService;
     }
 
+    // SCRUM-118: Register
     [HttpPost("register")]
     [AllowAnonymous]
     public async Task<ActionResult<RegisterResponse>> Register(
@@ -29,7 +30,8 @@ public class AuthController : ControllerBase
             var response = await _authService.RegisterAsync(
                 request, cancellationToken);
 
-            return StatusCode(StatusCodes.Status201Created, response);
+            return StatusCode(
+                StatusCodes.Status201Created, response);
         }
         catch (RegistrationConflictException ex)
         {
@@ -42,11 +44,15 @@ public class AuthController : ControllerBase
         }
     }
 
+    // SCRUM-121: Login
     [HttpPost("login")]
     [AllowAnonymous]
-    [ProducesResponseType(typeof(LoginResponse), StatusCodes.Status200OK)]
-    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(
+        typeof(LoginResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(
+        typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(
+        typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<LoginResponse>> Login(
         [FromBody] LoginRequest request,
         CancellationToken cancellationToken)
@@ -69,12 +75,26 @@ public class AuthController : ControllerBase
         }
     }
 
+    // SCRUM-124: Stateless Logout
+    [HttpPost("logout")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    public IActionResult Logout()
+    {
+        return NoContent();
+    }
+
+    // SCRUM-134: Change Password
     [HttpPut("change-password")]
     [Authorize]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
-    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    [ProducesResponseType(
+        typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(
+        typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(
+        typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> ChangePassword(
         [FromBody] ChangePasswordRequest request,
         CancellationToken cancellationToken)
@@ -95,9 +115,7 @@ public class AuthController : ControllerBase
         try
         {
             await _authService.ChangePasswordAsync(
-                userId,
-                request,
-                cancellationToken);
+                userId, request, cancellationToken);
 
             return NoContent();
         }
@@ -128,5 +146,4 @@ public class AuthController : ControllerBase
             });
         }
     }
-
 }
