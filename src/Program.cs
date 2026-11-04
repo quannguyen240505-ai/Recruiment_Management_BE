@@ -9,6 +9,7 @@ using Microsoft.IdentityModel.Tokens;
 using System.Text;
 using Microsoft.OpenApi.Models;
 using Recruitment.Api.Services.Auth;
+using Recruitment.Api.Services.Jobs;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -101,8 +102,7 @@ builder.Services.AddAuthorization(options =>
 // 3. CẤU HÌNH QUY ƯỚC LỖI CHUẨN (Thêm mới)
 builder.Services.AddProblemDetails();
 
-// TODO: đăng ký các service nghiệp vụ tại đây, ví dụ:
-// builder.Services.AddScoped<IJobService, JobService>();
+builder.Services.AddScoped<IJobService, JobService>();
 
 var app = builder.Build();
 

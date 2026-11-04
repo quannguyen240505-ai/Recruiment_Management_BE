@@ -1,3 +1,5 @@
+using static Microsoft.EntityFrameworkCore.DbLoggerCategory.Database;
+
 namespace Recruitment.Api.Entities;
 
 // Thêm enum cho AccountStatus
@@ -29,5 +31,7 @@ public class User
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAtUtc { get; set; }
     public DateTime? DeletedAtUtc { get; set; }
+    public string? CompanyId { get; set; }
+    public Company? Company { get; set; }
 
 }
