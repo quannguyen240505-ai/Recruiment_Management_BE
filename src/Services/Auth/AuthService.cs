@@ -121,4 +121,59 @@ public class AuthService : IAuthService
         };
     }
 
+    public async Task ChangePasswordAsync(
+        string userId,
+        ChangePasswordRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var user = await _db.Users
+            .SingleOrDefaultAsync(
+                u => u.UserId == userId,
+                cancellationToken);
+
+        if (user == null ||
+            user.AccountStatus != AccountStatus.ACTIVE ||
+            user.DeletedAtUtc != null)
+        {
+            throw new UnauthorizedAccessException(
+                "Tài khoản không khả dụng.");
+        }
+
+        if (string.IsNullOrWhiteSpace(user.PasswordHash))
+        {
+            throw new InvalidOperationException(
+                "Tài khoản chưa có mật khẩu nội bộ.");
+        }
+
+        var currentPasswordResult = _passwordHasher.VerifyHashedPassword(
+            user,
+            user.PasswordHash,
+            request.CurrentPassword);
+
+        if (currentPasswordResult == PasswordVerificationResult.Failed)
+        {
+            throw new ArgumentException(
+                "Mật khẩu hiện tại không chính xác.");
+        }
+
+        var newPasswordResult = _passwordHasher.VerifyHashedPassword(
+            user,
+            user.PasswordHash,
+            request.NewPassword);
+
+        if (newPasswordResult != PasswordVerificationResult.Failed)
+        {
+            throw new ArgumentException(
+                "Mật khẩu mới phải khác mật khẩu hiện tại.");
+        }
+
+        user.PasswordHash = _passwordHasher.HashPassword(
+            user,
+            request.NewPassword);
+
+        user.UpdatedAtUtc = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
 }

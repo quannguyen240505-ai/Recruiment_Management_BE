@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Recruitment.Api.Dtos.Auth;
 using Recruitment.Api.Services.Auth;
+using System.Security.Claims;
 
 namespace Recruitment.Api.Controllers;
 
@@ -67,4 +68,65 @@ public class AuthController : ControllerBase
             });
         }
     }
+
+    [HttpPut("change-password")]
+    [Authorize]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
+    public async Task<IActionResult> ChangePassword(
+        [FromBody] ChangePasswordRequest request,
+        CancellationToken cancellationToken)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub");
+
+        if (string.IsNullOrWhiteSpace(userId))
+        {
+            return Unauthorized(new ProblemDetails
+            {
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "Xác thực không hợp lệ",
+                Detail = "Không xác định được tài khoản từ JWT."
+            });
+        }
+
+        try
+        {
+            await _authService.ChangePasswordAsync(
+                userId,
+                request,
+                cancellationToken);
+
+            return NoContent();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized(new ProblemDetails
+            {
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "Tài khoản không khả dụng"
+            });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Status = StatusCodes.Status400BadRequest,
+                Title = "Không thể đổi mật khẩu",
+                Detail = ex.Message
+            });
+        }
+        catch (InvalidOperationException)
+        {
+            return Conflict(new ProblemDetails
+            {
+                Status = StatusCodes.Status409Conflict,
+                Title = "Tài khoản chưa có mật khẩu nội bộ",
+                Detail = "Tài khoản này chưa thể đổi mật khẩu bằng chức năng hiện tại."
+            });
+        }
+    }
+
 }

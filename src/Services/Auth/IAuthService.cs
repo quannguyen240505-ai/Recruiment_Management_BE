@@ -10,6 +10,11 @@ public interface IAuthService
         CancellationToken cancellationToken = default);
 
     Task<LoginResponse> LoginAsync(
-       LoginRequest request,
-       CancellationToken cancellationToken = default);
+        LoginRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task ChangePasswordAsync(
+        string userId,
+        ChangePasswordRequest request,
+        CancellationToken cancellationToken = default);
 }

@@ -1,8 +1,14 @@
 
 using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.Sqlite;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Recruitment.Api.Controllers;
+using Recruitment.Api.Data;
 using Recruitment.Api.Dtos.Auth;
+using Recruitment.Api.Entities;
 using Recruitment.Api.Services.Auth;
 using Xunit;
 
@@ -66,6 +72,15 @@ public class AuthControllerTests
 
     private sealed class FakeAuthService : IAuthService
     {
+
+        public Task ChangePasswordAsync(
+            string userId,
+            ChangePasswordRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotImplementedException();
+        }
+
         private readonly RegisterResponse _response;
 
         public Task<LoginResponse> LoginAsync(
@@ -91,6 +106,15 @@ public class AuthControllerTests
 
     private sealed class FakeConflictAuthService : IAuthService
     {
+
+        public Task ChangePasswordAsync(
+            string userId,
+            ChangePasswordRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            throw new NotImplementedException();
+        }
+
         private readonly string _message;
 
         public Task<LoginResponse> LoginAsync(
@@ -113,5 +137,4 @@ public class AuthControllerTests
                 new RegistrationConflictException(_message));
         }
     }
-
 }
