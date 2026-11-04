@@ -17,6 +17,7 @@ public class AuthController : ControllerBase
         _authService = authService;
     }
 
+    // SCRUM-118: Register
     [HttpPost("register")]
     [AllowAnonymous]
     public async Task<ActionResult<RegisterResponse>> Register(
@@ -37,6 +38,40 @@ public class AuthController : ControllerBase
                 Status = StatusCodes.Status409Conflict,
                 Title = "Tài khoản đã tồn tại",
                 Detail = ex.Message
+            });
+        }
+    }
+
+    // SCRUM-121: Login
+    [HttpPost("login")]
+    [AllowAnonymous]
+    [ProducesResponseType(
+        typeof(LoginResponse),
+        StatusCodes.Status200OK)]
+    [ProducesResponseType(
+        typeof(ValidationProblemDetails),
+        StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(
+        typeof(ProblemDetails),
+        StatusCodes.Status401Unauthorized)]
+    public async Task<ActionResult<LoginResponse>> Login(
+        [FromBody] LoginRequest request,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var response = await _authService.LoginAsync(
+                request, cancellationToken);
+
+            return Ok(response);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return Unauthorized(new ProblemDetails
+            {
+                Status = StatusCodes.Status401Unauthorized,
+                Title = "Đăng nhập thất bại",
+                Detail = "Thông tin đăng nhập không hợp lệ hoặc tài khoản không khả dụng."
             });
         }
     }
