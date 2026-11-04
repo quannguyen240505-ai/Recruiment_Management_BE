@@ -18,6 +18,8 @@ public class CreateJobRequest
     public string Location { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "JobType không được để trống")]
+    // Thêm dòng này để validate giá trị phải thuộc Enum (tránh trường hợp client gửi số 999)
+    [EnumDataType(typeof(JobType), ErrorMessage = "JobType không hợp lệ. Chỉ chấp nhận các giá trị của Enum.")]
     public JobType? JobType { get; set; }
 
     [Required(ErrorMessage = "Experience không được để trống")]

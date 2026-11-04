@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Recruitment.Api.Data;
@@ -105,6 +106,7 @@ public class JobServiceTests : IDisposable
 
         await Assert.ThrowsAsync<InvalidOperationException>(() => _jobService.CreateJobAsync(GetValidRequest(), "REC-02"));
     }
+
     [Fact]
     public async Task CreateJob_RecruiterLocked_Throws()
     {
@@ -119,12 +121,20 @@ public class JobServiceTests : IDisposable
     [Fact]
     public async Task CreateJob_CompanyNotExists_Throws()
     {
-        var comp = await _db.Companies.FindAsync("COMP-01");
-        _db.Companies.Remove(comp!);
-        await _db.SaveChangesAsync();
+        // Lấy User đang được track bởi DbContext
+        var rec = await _db.Users.FindAsync("REC-01");
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+        // Thay đổi CompanyId trong bộ nhớ (KHÔNG gọi SaveChangesAsync để tránh lỗi FK của SQLite)
+        rec!.CompanyId = "COMP-NOT-EXIST";
+
+        // Khi gọi Service:
+        // - Nó query User từ ChangeTracker (sẽ thấy CompanyId mới)
+        // - Nó query bảng Companies dưới DB (sẽ không thấy COMP-NOT-EXIST)
+        // -> Ném ra InvalidOperationException
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             _jobService.CreateJobAsync(GetValidRequest(), "REC-01"));
+
+        Assert.Contains("không tồn tại trong hệ thống", ex.Message);
     }
 
     [Fact]
@@ -135,6 +145,34 @@ public class JobServiceTests : IDisposable
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             _jobService.CreateJobAsync(req, "REC-01"));
+    }
+
+    [Fact]
+    public void CreateJobRequest_InvalidJobType_ShouldFailValidation()
+    {
+        // Tạo request với jobType = 999 (giá trị không nằm trong Enum)
+        var request = new CreateJobRequest
+        {
+            Title = "Test",
+            Description = "Test",
+            Requirements = "Test",
+            Location = "Test",
+            JobType = (JobType)999,
+            Experience = "Test",
+            NumberOfPositions = 1,
+            Deadline = DateTime.UtcNow.AddDays(1),
+            CategoryId = "CAT-01",
+            SkillIds = new List<string> { "SKILL-01" }
+        };
+
+        // Chạy Validation bằng DataAnnotations
+        var context = new ValidationContext(request);
+        var results = new List<ValidationResult>();
+        var isValid = Validator.TryValidateObject(request, context, results, true);
+
+        // Kỳ vọng: Validate False và có lỗi liên quan đến JobType
+        Assert.False(isValid);
+        Assert.Contains(results, r => r.MemberNames.Contains("JobType"));
     }
 
     public void Dispose()
