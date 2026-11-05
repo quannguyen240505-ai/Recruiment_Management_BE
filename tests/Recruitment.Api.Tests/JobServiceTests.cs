@@ -5,6 +5,9 @@ using Recruitment.Api.Data;
 using Recruitment.Api.Dtos.Job;
 using Recruitment.Api.Entities;
 using Recruitment.Api.Services.Jobs;
+using Microsoft.AspNetCore.Mvc;
+using Recruitment.Api.Controllers;
+using System.Text.Json;
 
 namespace Recruitment.Api.Tests;
 
@@ -236,6 +239,57 @@ public class JobServiceTests : IDisposable
         var result = await _jobService.GetJobDetailAsync(created.JobId);
 
         Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task GetJobDetail_DeadlineToday_ReturnsNull()
+    {
+        var created = await _jobService.CreateJobAsync(
+            GetValidRequest(), "REC-01");
+
+        var job = await _db.Jobs.FindAsync(created.JobId);
+        Assert.NotNull(job);
+
+        job.Deadline = DateTime.UtcNow.Date.AddDays(1).AddTicks(-1);
+        await _db.SaveChangesAsync();
+
+        var result = await _jobService.GetJobDetailAsync(created.JobId);
+
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public async Task CreateJob_DeadlineToday_Throws()
+    {
+        var request = GetValidRequest();
+        request.Deadline = DateTime.UtcNow.Date.AddDays(1).AddTicks(-1);
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            _jobService.CreateJobAsync(request, "REC-01"));
+    }
+
+    [Fact]
+    public async Task GetJobDetail_DeletedJob_Returns404()
+    {
+        var created = await _jobService.CreateJobAsync(
+            GetValidRequest(), "REC-01");
+
+        var job = await _db.Jobs.FindAsync(created.JobId);
+        Assert.NotNull(job);
+
+        job.DeletedAtUtc = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        var controller = new JobsController(_jobService);
+        var result = await controller.GetJobDetail(created.JobId);
+
+        var response = Assert.IsType<NotFoundObjectResult>(
+            result.Result);
+
+        Assert.Equal(404, response.StatusCode);
+
+        var json = JsonSerializer.Serialize(response.Value);
+        Assert.Contains("JOB_NOT_FOUND", json);
     }
 
     public void Dispose()

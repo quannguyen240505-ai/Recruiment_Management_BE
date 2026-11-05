@@ -103,7 +103,7 @@ public class JobService : IJobService
         if (string.IsNullOrWhiteSpace(jobId))
             return null;
 
-        var now = DateTime.UtcNow;
+        var tomorrowUtc = DateTime.UtcNow.Date.AddDays(1);
 
         var job = await _context.Jobs
             .AsNoTracking()
@@ -113,7 +113,8 @@ public class JobService : IJobService
             .FirstOrDefaultAsync(j =>
                 j.JobId == jobId &&
                 j.Status == JobStatus.OPEN &&
-                j.Deadline > now);
+                j.DeletedAtUtc == null &&
+                j.Deadline >= tomorrowUtc);
 
         if (job == null)
             return null;
