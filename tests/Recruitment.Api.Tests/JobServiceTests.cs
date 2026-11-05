@@ -389,6 +389,13 @@ public class JobServiceTests : IDisposable
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
             _jobService.GetMyJobsAsync("REC-01", null, 1, 10));
     }
+    [Fact]
+    public async Task GetMyJobs_PageOverflow_Throws()
+    {
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            _jobService.GetMyJobsAsync(
+                "REC-01", null, int.MaxValue, 100));
+    }
 
     public void Dispose()
     {

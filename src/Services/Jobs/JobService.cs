@@ -172,9 +172,12 @@ public class JobService : IJobService
         {
             throw new UnauthorizedAccessException("Tài khoản không hợp lệ, đã bị khóa hoặc không có quyền.");
         }
+        long skipLong = ((long)page - 1) * pageSize;
 
-        // 3. Tính offset bằng long để tránh tràn số (Quốc Feedback 1)
-        long skipLong = (long)(page - 1) * pageSize;
+        if (skipLong > int.MaxValue)
+            throw new ArgumentException("Page vượt quá giới hạn phân trang.");
+
+        int skip = (int)skipLong;
 
         // 4. Query
         var query = _context.Jobs
@@ -189,7 +192,7 @@ public class JobService : IJobService
 
         var jobs = await query
             .OrderByDescending(j => j.CreatedAt)
-            .Skip((int)skipLong)
+            .Skip(skip)
             .Take(pageSize)
             .Select(j => new JobSummaryResponse
             {
