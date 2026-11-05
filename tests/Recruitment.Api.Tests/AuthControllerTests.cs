@@ -111,7 +111,12 @@ public class AuthControllerTests
 
     private sealed class FakeAuthService : IAuthService
     {
-
+        public Task<LoginResponse> GoogleLoginAsync(
+    GoogleLoginRequest request,
+    CancellationToken cancellationToken = default)
+        {
+            throw new NotImplementedException();
+        }
         public Task ChangePasswordAsync(
             string userId,
             ChangePasswordRequest request,
@@ -145,7 +150,12 @@ public class AuthControllerTests
 
     private sealed class FakeConflictAuthService : IAuthService
     {
-
+        public Task<LoginResponse> GoogleLoginAsync(
+    GoogleLoginRequest request,
+    CancellationToken cancellationToken = default)
+        {
+            throw new NotImplementedException();
+        }
         public Task ChangePasswordAsync(
             string userId,
             ChangePasswordRequest request,
