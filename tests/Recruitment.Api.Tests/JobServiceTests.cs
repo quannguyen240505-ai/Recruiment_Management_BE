@@ -343,6 +343,34 @@ public class JobServiceTests : IDisposable
         var resultClosed = await _jobService.GetMyJobsAsync("REC-01", JobStatus.CLOSED, 1, 10);
         Assert.Single(resultClosed.Items);
     }
+    [Fact]
+    public async Task GetMyJobs_EmptyList_ReturnsEmpty()
+    {
+        _db.Users.Add(new User { UserId = "REC-03", Username = "rec3", Email = "rec3@test.com", FullName = "Rec3", RoleId = "RECRUITER", CompanyId = "COMP-01", AccountStatus = AccountStatus.ACTIVE, CreatedAtUtc = DateTime.UtcNow });
+        await _db.SaveChangesAsync();
+
+        var result = await _jobService.GetMyJobsAsync("REC-03", null, 1, 10);
+
+        Assert.Empty(result.Items);
+        Assert.Equal(0, result.TotalCount);
+    }
+
+    [Fact]
+    public async Task GetMyJobs_Pagination_ReturnsCorrectPage()
+    {
+        for (int i = 0; i < 15; i++)
+        {
+            await _jobService.CreateJobAsync(GetValidRequest(), "REC-01");
+        }
+
+        var page1 = await _jobService.GetMyJobsAsync("REC-01", null, 1, 10);
+        Assert.Equal(10, page1.Items.Count);
+        Assert.Equal(15, page1.TotalCount);
+        Assert.Equal(2, page1.TotalPages);
+
+        var page2 = await _jobService.GetMyJobsAsync("REC-01", null, 2, 10);
+        Assert.Equal(5, page2.Items.Count);
+    }
 
     public void Dispose()
     {
