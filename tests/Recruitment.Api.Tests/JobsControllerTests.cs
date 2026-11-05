@@ -1,7 +1,9 @@
-
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Recruitment.Api.Controllers;
+using Recruitment.Api.Dtos;
 using Recruitment.Api.Dtos.Job;
+using Recruitment.Api.Entities;
 using Recruitment.Api.Services.Jobs;
 using System.Text.Json;
 
@@ -47,6 +49,22 @@ public class JobsControllerTests
         Assert.Contains("JOB_NOT_FOUND", json);
     }
 
+    [Fact]
+    public async Task GetMyJobs_Guest_ReturnsUnauthorized()
+    {
+        // Sửa lỗi: Khởi tạo trực tiếp FakeJobService thay vì dùng biến _fakeJobService chưa khai báo
+        var controller = new JobsController(new FakeJobService(null));
+
+        // Giả lập không có Claims (Guest)
+        controller.ControllerContext = new ControllerContext
+        {
+            HttpContext = new DefaultHttpContext()
+        };
+
+        var result = await controller.GetMyJobs(null, 1, 10);
+        Assert.IsType<UnauthorizedResult>(result);
+    }
+
     private sealed class FakeJobService : IJobService
     {
         private readonly JobDetailResponse? _job;
@@ -66,6 +84,12 @@ public class JobsControllerTests
             string recruiterId)
         {
             throw new NotSupportedException();
+        }
+
+        public Task<PagedResult<JobSummaryResponse>> GetMyJobsAsync(string recruiterId, JobStatus? status, int page, int pageSize)
+        {
+            // Vì đây là Fake service dùng để test Controller, ta chỉ cần trả về một kết quả rỗng là đủ.
+            return Task.FromResult(new PagedResult<JobSummaryResponse>());
         }
     }
 }

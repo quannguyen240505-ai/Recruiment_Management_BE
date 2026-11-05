@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Recruitment.Api.Data;
+using Recruitment.Api.Dtos;
 using Recruitment.Api.Dtos.Job;
 using Recruitment.Api.Entities;
 
@@ -152,6 +153,64 @@ public class JobService : IJobService
                 })
                 .OrderBy(s => s.Name)
                 .ToList()
+        };
+    }
+    public async Task<PagedResult<JobSummaryResponse>> GetMyJobsAsync(string recruiterId, JobStatus? status, int page, int pageSize)
+    {
+        // 1. Kiểm tra tham số phân trang (Quốc Feedback 1)
+        if (page <= 0)
+            throw new ArgumentException("Page phải lớn hơn 0.");
+        if (pageSize <= 0 || pageSize > 100)
+            throw new ArgumentException("PageSize phải nằm trong khoảng từ 1 đến 100.");
+
+        // 2. Kiểm tra tài khoản (Quốc Feedback 2)
+        var recruiter = await _context.Users.FirstOrDefaultAsync(u => u.UserId == recruiterId);
+        if (recruiter == null ||
+            recruiter.RoleId != "RECRUITER" ||
+            recruiter.AccountStatus != AccountStatus.ACTIVE ||
+            recruiter.DeletedAtUtc != null)
+        {
+            throw new UnauthorizedAccessException("Tài khoản không hợp lệ, đã bị khóa hoặc không có quyền.");
+        }
+        long skipLong = ((long)page - 1) * pageSize;
+
+        if (skipLong > int.MaxValue)
+            throw new ArgumentException("Page vượt quá giới hạn phân trang.");
+
+        int skip = (int)skipLong;
+
+        // 4. Query
+        var query = _context.Jobs
+            .Include(j => j.Company)
+            .Where(j => j.RecruiterId == recruiterId && j.DeletedAtUtc == null)
+            .AsQueryable();
+
+        if (status.HasValue)
+            query = query.Where(j => j.Status == status.Value);
+
+        var totalCount = await query.CountAsync();
+
+        var jobs = await query
+            .OrderByDescending(j => j.CreatedAt)
+            .Skip(skip)
+            .Take(pageSize)
+            .Select(j => new JobSummaryResponse
+            {
+                JobId = j.JobId,
+                Title = j.Title,
+                Status = j.Status.ToString(),
+                CompanyName = j.Company.Name,
+                Deadline = j.Deadline,
+                CreatedAt = j.CreatedAt
+            })
+            .ToListAsync();
+
+        return new PagedResult<JobSummaryResponse>
+        {
+            Items = jobs,
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize
         };
     }
 
