@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Recruitment.Api.Data;
+using Recruitment.Api.Dtos;
 using Recruitment.Api.Dtos.Job;
 using Recruitment.Api.Entities;
 
@@ -152,6 +153,47 @@ public class JobService : IJobService
                 })
                 .OrderBy(s => s.Name)
                 .ToList()
+        };
+    }
+    public async Task<PagedResult<JobSummaryResponse>> GetMyJobsAsync(string recruiterId, JobStatus? status, int page, int pageSize)
+    {
+        if (page < 1) page = 1;
+        if (pageSize < 1) pageSize = 10;
+
+        // 1. Chỉ lấy Job của Recruiter này và chưa bị xóa mềm
+        var query = _context.Jobs
+            .Include(j => j.Company)
+            .Where(j => j.RecruiterId == recruiterId && j.DeletedAtUtc == null)
+            .AsQueryable();
+
+        // 2. Lọc theo Status
+        if (status.HasValue)
+            query = query.Where(j => j.Status == status.Value);
+
+        var totalCount = await query.CountAsync();
+
+        // 3. Phân trang và sắp xếp
+        var jobs = await query
+            .OrderByDescending(j => j.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(j => new JobSummaryResponse
+            {
+                JobId = j.JobId,
+                Title = j.Title,
+                Status = j.Status.ToString(),
+                CompanyName = j.Company.Name,
+                Deadline = j.Deadline,
+                CreatedAt = j.CreatedAt
+            })
+            .ToListAsync();
+
+        return new PagedResult<JobSummaryResponse>
+        {
+            Items = jobs,
+            TotalCount = totalCount,
+            Page = page,
+            PageSize = pageSize
         };
     }
 

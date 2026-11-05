@@ -1,7 +1,9 @@
 
 using Microsoft.AspNetCore.Mvc;
 using Recruitment.Api.Controllers;
+using Recruitment.Api.Dtos;
 using Recruitment.Api.Dtos.Job;
+using Recruitment.Api.Entities;
 using Recruitment.Api.Services.Jobs;
 using System.Text.Json;
 
@@ -66,6 +68,11 @@ public class JobsControllerTests
             string recruiterId)
         {
             throw new NotSupportedException();
+        }
+        public Task<PagedResult<JobSummaryResponse>> GetMyJobsAsync(string recruiterId, JobStatus? status, int page, int pageSize)
+        {
+            // Vì đây là Fake service dùng để test Controller, ta chỉ cần trả về một kết quả rỗng là đủ.
+            return Task.FromResult(new PagedResult<JobSummaryResponse>());
         }
     }
 }

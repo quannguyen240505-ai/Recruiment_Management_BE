@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Recruitment.Api.Dtos.Job;
+using Recruitment.Api.Entities;
 using Recruitment.Api.Services.Jobs;
 using System.Security.Claims;
 
@@ -60,5 +61,17 @@ public class JobsController : ControllerBase
 
         return Ok(job);
     }
+    [HttpGet("/api/recruiter/jobs")]
+    [Authorize(Policy = "RequireRecruiterRole")]
+    public async Task<IActionResult> GetMyJobs(
+    [FromQuery] JobStatus? status,
+    [FromQuery] int page = 1,
+    [FromQuery] int pageSize = 10)
+    {
+        var recruiterId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(recruiterId)) return Unauthorized();
 
+        var result = await _jobService.GetMyJobsAsync(recruiterId, status, page, pageSize);
+        return Ok(result);
+    }
 }

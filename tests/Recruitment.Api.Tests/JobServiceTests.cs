@@ -47,6 +47,8 @@ public class JobServiceTests : IDisposable
             AccountStatus = AccountStatus.ACTIVE,
             CreatedAtUtc = DateTime.UtcNow
         });
+        _db.Users.Add(new User { UserId = "REC-02", Username = "rec2", Email = "rec2@test.com", FullName = "Rec2", RoleId = "RECRUITER", CompanyId = "COMP-01", AccountStatus = AccountStatus.ACTIVE, CreatedAtUtc = DateTime.UtcNow });
+        _db.Jobs.Add(new Job { JobId = "JOB-REC2", Title = "Job cua Rec2", Status = JobStatus.OPEN, RecruiterId = "REC-02", CompanyId = "COMP-01", CategoryId = "CAT-01", Description = "D", Requirements = "R", Location = "L", Experience = "E", NumberOfPositions = 1, Deadline = DateTime.UtcNow.AddDays(10) });
         _db.SaveChanges();
     }
 
@@ -104,10 +106,21 @@ public class JobServiceTests : IDisposable
     [Fact]
     public async Task CreateJob_RecruiterWithoutCompany_Throws()
     {
-        _db.Users.Add(new User { UserId = "REC-02", Username = "rec2", Email = "rec2@test.com", FullName = "Rec2", RoleId = "RECRUITER", CompanyId = null, AccountStatus = AccountStatus.ACTIVE, CreatedAtUtc = DateTime.UtcNow });
-        _db.SaveChanges();
+        _db.Users.Add(new User
+        {
+            UserId = "REC-NO-COMP",
+            Username = "recnocomp",
+            Email = "recnocomp@test.com",
+            FullName = "RecNoComp",
+            RoleId = "RECRUITER",
+            CompanyId = null,
+            AccountStatus = AccountStatus.ACTIVE,
+            CreatedAtUtc = DateTime.UtcNow
+        });
+        await _db.SaveChangesAsync();
 
-        await Assert.ThrowsAsync<InvalidOperationException>(() => _jobService.CreateJobAsync(GetValidRequest(), "REC-02"));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _jobService.CreateJobAsync(GetValidRequest(), "REC-NO-COMP"));
     }
 
     [Fact]
@@ -290,6 +303,45 @@ public class JobServiceTests : IDisposable
 
         var json = JsonSerializer.Serialize(response.Value);
         Assert.Contains("JOB_NOT_FOUND", json);
+    }
+    [Fact]
+    public async Task GetMyJobs_ReturnsOnlyJobsOfLoggedInRecruiter()
+    {
+        await _jobService.CreateJobAsync(GetValidRequest(), "REC-01");
+
+        var result = await _jobService.GetMyJobsAsync("REC-01", null, 1, 10);
+
+        Assert.Equal(1, result.TotalCount);
+        Assert.All(result.Items, item => Assert.NotEqual("JOB-REC2", item.JobId));
+    }
+
+    [Fact]
+    public async Task GetMyJobs_ExcludesSoftDeletedJobs()
+    {
+        await _jobService.CreateJobAsync(GetValidRequest(), "REC-01");
+
+        var job = await _db.Jobs.FirstAsync(j => j.RecruiterId == "REC-01");
+        job.DeletedAtUtc = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        var result = await _jobService.GetMyJobsAsync("REC-01", null, 1, 10);
+        Assert.Empty(result.Items);
+    }
+
+    [Fact]
+    public async Task GetMyJobs_WithStatusFilter_ReturnsFilteredJobs()
+    {
+        await _jobService.CreateJobAsync(GetValidRequest(), "REC-01");
+
+        var job = await _db.Jobs.FirstAsync(j => j.RecruiterId == "REC-01");
+        job.Status = JobStatus.CLOSED;
+        await _db.SaveChangesAsync();
+
+        var resultOpen = await _jobService.GetMyJobsAsync("REC-01", JobStatus.OPEN, 1, 10);
+        Assert.Empty(resultOpen.Items);
+
+        var resultClosed = await _jobService.GetMyJobsAsync("REC-01", JobStatus.CLOSED, 1, 10);
+        Assert.Single(resultClosed.Items);
     }
 
     public void Dispose()
