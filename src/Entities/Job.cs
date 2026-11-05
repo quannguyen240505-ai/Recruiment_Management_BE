@@ -15,6 +15,7 @@ public class Job
     public DateTime Deadline { get; set; }
     public JobStatus Status { get; set; } = JobStatus.OPEN;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? DeletedAtUtc { get; set; }
 
     // Foreign Keys
     public string CategoryId { get; set; } = string.Empty;

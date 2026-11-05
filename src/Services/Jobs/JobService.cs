@@ -97,4 +97,62 @@ public class JobService : IJobService
             CreatedAt = job.CreatedAt
         };
     }
+
+    public async Task<JobDetailResponse?> GetJobDetailAsync(string jobId)
+    {
+        if (string.IsNullOrWhiteSpace(jobId))
+            return null;
+
+        var tomorrowUtc = DateTime.UtcNow.Date.AddDays(1);
+
+        var job = await _context.Jobs
+            .AsNoTracking()
+            .Include(j => j.Company)
+            .Include(j => j.JobSkills)
+                .ThenInclude(js => js.Skill)
+            .FirstOrDefaultAsync(j =>
+                j.JobId == jobId &&
+                j.Status == JobStatus.OPEN &&
+                j.DeletedAtUtc == null &&
+                j.Deadline >= tomorrowUtc);
+
+        if (job == null)
+            return null;
+
+        return new JobDetailResponse
+        {
+            JobId = job.JobId,
+            Title = job.Title,
+            Description = job.Description,
+            Requirements = job.Requirements,
+            Location = job.Location,
+            JobType = job.JobType.ToString(),
+            Experience = job.Experience,
+            NumberOfPositions = job.NumberOfPositions,
+            SalaryMin = job.SalaryMin,
+            SalaryMax = job.SalaryMax,
+            Deadline = job.Deadline,
+            Status = job.Status.ToString(),
+            CreatedAt = job.CreatedAt,
+
+            Company = new JobCompanyResponse
+            {
+                CompanyId = job.Company.CompanyId,
+                Name = job.Company.Name,
+                Website = job.Company.Website,
+                Address = job.Company.Address,
+                Description = job.Company.Description
+            },
+
+            Skills = job.JobSkills
+                .Select(js => new JobSkillResponse
+                {
+                    SkillId = js.SkillId,
+                    Name = js.Skill.Name
+                })
+                .OrderBy(s => s.Name)
+                .ToList()
+        };
+    }
+
 }

@@ -42,4 +42,23 @@ public class JobsController : ControllerBase
             return StatusCode(403, new ProblemDetails { Title = "Lỗi Tài khoản", Detail = ex.Message, Status = 403 });
         }
     }
+
+    [HttpGet("{jobId}")]
+    [AllowAnonymous]
+    public async Task<ActionResult<JobDetailResponse>> GetJobDetail(string jobId)
+    {
+        var job = await _jobService.GetJobDetailAsync(jobId);
+
+        if (job == null)
+        {
+            return NotFound(new
+            {
+                code = "JOB_NOT_FOUND",
+                message = "Không tìm thấy hoặc không thể xem công việc này."
+            });
+        }
+
+        return Ok(job);
+    }
+
 }
