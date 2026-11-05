@@ -157,25 +157,39 @@ public class JobService : IJobService
     }
     public async Task<PagedResult<JobSummaryResponse>> GetMyJobsAsync(string recruiterId, JobStatus? status, int page, int pageSize)
     {
-        if (page < 1) page = 1;
-        if (pageSize < 1) pageSize = 10;
+        // 1. Kiểm tra tham số phân trang (Quốc Feedback 1)
+        if (page <= 0)
+            throw new ArgumentException("Page phải lớn hơn 0.");
+        if (pageSize <= 0 || pageSize > 100)
+            throw new ArgumentException("PageSize phải nằm trong khoảng từ 1 đến 100.");
 
-        // 1. Chỉ lấy Job của Recruiter này và chưa bị xóa mềm
+        // 2. Kiểm tra tài khoản (Quốc Feedback 2)
+        var recruiter = await _context.Users.FirstOrDefaultAsync(u => u.UserId == recruiterId);
+        if (recruiter == null ||
+            recruiter.RoleId != "RECRUITER" ||
+            recruiter.AccountStatus != AccountStatus.ACTIVE ||
+            recruiter.DeletedAtUtc != null)
+        {
+            throw new UnauthorizedAccessException("Tài khoản không hợp lệ, đã bị khóa hoặc không có quyền.");
+        }
+
+        // 3. Tính offset bằng long để tránh tràn số (Quốc Feedback 1)
+        long skipLong = (long)(page - 1) * pageSize;
+
+        // 4. Query
         var query = _context.Jobs
             .Include(j => j.Company)
             .Where(j => j.RecruiterId == recruiterId && j.DeletedAtUtc == null)
             .AsQueryable();
 
-        // 2. Lọc theo Status
         if (status.HasValue)
             query = query.Where(j => j.Status == status.Value);
 
         var totalCount = await query.CountAsync();
 
-        // 3. Phân trang và sắp xếp
         var jobs = await query
             .OrderByDescending(j => j.CreatedAt)
-            .Skip((page - 1) * pageSize)
+            .Skip((int)skipLong)
             .Take(pageSize)
             .Select(j => new JobSummaryResponse
             {

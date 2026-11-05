@@ -71,7 +71,20 @@ public class JobsController : ControllerBase
         var recruiterId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrEmpty(recruiterId)) return Unauthorized();
 
-        var result = await _jobService.GetMyJobsAsync(recruiterId, status, page, pageSize);
-        return Ok(result);
+        try
+        {
+            var result = await _jobService.GetMyJobsAsync(recruiterId, status, page, pageSize);
+            return Ok(result);
+        }
+        catch (ArgumentException ex)
+        {
+            // Trả về 400 cho tham số không hợp lệ
+            return BadRequest(new ProblemDetails { Title = "Lỗi tham số", Detail = ex.Message, Status = 400 });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            // Trả về 403 khi tài khoản không còn quyền
+            return StatusCode(403, new ProblemDetails { Title = "Lỗi Phân quyền", Detail = ex.Message, Status = 403 });
+        }
     }
 }

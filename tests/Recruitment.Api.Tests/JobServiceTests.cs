@@ -371,6 +371,24 @@ public class JobServiceTests : IDisposable
         var page2 = await _jobService.GetMyJobsAsync("REC-01", null, 2, 10);
         Assert.Equal(5, page2.Items.Count);
     }
+    [Fact]
+    public async Task GetMyJobs_InvalidPagination_Throws()
+    {
+        await Assert.ThrowsAsync<ArgumentException>(() => _jobService.GetMyJobsAsync("REC-01", null, 0, 10));
+        await Assert.ThrowsAsync<ArgumentException>(() => _jobService.GetMyJobsAsync("REC-01", null, 1, 101));
+    }
+
+    [Fact]
+    public async Task GetMyJobs_UserNotRecruiter_Throws()
+    {
+        // Đổi role của REC-01 thành CANDIDATE
+        var user = await _db.Users.FindAsync("REC-01");
+        user!.RoleId = "CANDIDATE";
+        await _db.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            _jobService.GetMyJobsAsync("REC-01", null, 1, 10));
+    }
 
     public void Dispose()
     {
