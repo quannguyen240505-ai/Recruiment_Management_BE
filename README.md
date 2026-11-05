@@ -22,13 +22,56 @@ Lần đầu chạy https, nếu trình duyệt cảnh báo chứng chỉ: `dotn
 ## Cấu hình và secrets
 Không commit secrets. `appsettings.json` chỉ chứa khóa rỗng làm mẫu. Giá trị thật đặt bằng User Secrets (máy cá nhân):
 ```bash
-cd src/Recruitment.Api
+cd src
 dotnet user-secrets set "ConnectionStrings:DefaultConnection" "<chuỗi kết nối của bạn>"
 dotnet user-secrets set "Jwt:Key" "<khóa tối thiểu 32 ký tự>"
 dotnet user-secrets set "Jwt:Issuer" "Recruitment.Api"
 dotnet user-secrets set "Jwt:Audience" "Recruitment.Client"
 ```
 Trên server hoặc CI dùng biến môi trường, ví dụ `ConnectionStrings__DefaultConnection`, `Jwt__Key`.
+
+### Google Authentication (SCRUM-131)
+
+Google Login sử dụng Google ID Token để xác thực người dùng.
+
+**Cấu hình Google Client ID bằng User Secrets:**
+
+Chạy từ thư mục gốc repository:
+
+```powershell
+dotnet user-secrets set "Google:ClientId" "<YOUR_GOOGLE_CLIENT_ID>" --project src/Recruitment.Api.csproj
+```
+
+Google Client ID được tạo tại Google Cloud Console:
+APIs & Services > Credentials > OAuth 2.0 Client IDs.
+
+Chọn loại Web application và cấu hình Authorized JavaScript origins
+phù hợp với địa chỉ Frontend, ví dụ http://localhost:4200.
+
+**Cấu hình bằng biến môi trường:**
+
+```powershell
+$env:Google__ClientId = "<YOUR_GOOGLE_CLIENT_ID>"
+```
+
+ASP.NET Core sử dụng Google:ClientId trong IConfiguration.
+
+Không commit JWT Secret, mật khẩu Database hoặc Google Client Secret
+vào GitHub. Google Client Secret không cần cho luồng xác minh ID Token này.
+
+**Endpoint:**
+
+POST /api/auth/google-login
+
+Request JSON:
+
+```json
+{
+  "idToken": "<GOOGLE_ID_TOKEN>"
+}
+```
+
+Khi token hợp lệ và tài khoản được phép đăng nhập, API trả về JWT nội bộ.
 
 ## Cấu trúc thư mục
 ```
