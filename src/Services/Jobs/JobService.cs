@@ -214,4 +214,156 @@ public class JobService : IJobService
         };
     }
 
+    public async Task<SearchJobsResponse> SearchJobsAsync(
+        SearchJobsRequest request)
+    {
+        // 1. Kiểm tra tham số
+        if (request.Page < 0)
+            throw new ArgumentException("Page phải >= 0.");
+
+        if (request.Size < 1 || request.Size > 100)
+            throw new ArgumentException("Size phải từ 1 đến 100.");
+
+        if (request.SalaryMin < 0)
+            throw new ArgumentException("SalaryMin không được âm.");
+
+        if (request.JobType.HasValue &&
+            !Enum.IsDefined(typeof(JobType), request.JobType.Value))
+            throw new ArgumentException("JobType không hợp lệ.");
+
+        long skipLong = (long)request.Page * request.Size;
+
+        if (skipLong > int.MaxValue)
+            throw new ArgumentException("Page vượt giới hạn phân trang.");
+
+        // 2. Chỉ lấy Job công khai, còn hạn
+        var tomorrowUtc = DateTime.UtcNow.Date.AddDays(1);
+
+        var query = _context.Jobs
+            .AsNoTracking()
+            .Where(j =>
+                j.Status == JobStatus.OPEN &&
+                j.DeletedAtUtc == null &&
+                j.Deadline >= tomorrowUtc);
+
+        // 3. Tìm theo tiêu đề hoặc tên công ty
+        if (!string.IsNullOrWhiteSpace(request.Keyword))
+        {
+            var keyword = request.Keyword.Trim().ToLower();
+
+            query = query.Where(j =>
+                j.Title.ToLower().Contains(keyword) ||
+                j.Company.Name.ToLower().Contains(keyword));
+        }
+
+        // 4. Bộ lọc địa điểm
+        if (!string.IsNullOrWhiteSpace(request.Location))
+        {
+            var location = request.Location.Trim().ToLower();
+
+            query = query.Where(j =>
+                j.Location.ToLower().Contains(location));
+        }
+
+        // 5. Loại công việc
+        if (request.JobType.HasValue)
+        {
+            var type = request.JobType.Value;
+            query = query.Where(j => j.JobType == type);
+        }
+
+        // 6. Kinh nghiệm
+        if (!string.IsNullOrWhiteSpace(request.Experience))
+        {
+            var experience = request.Experience.Trim().ToLower();
+
+            query = query.Where(j =>
+                j.Experience.ToLower().Contains(experience));
+        }
+
+        // 7. Lương tối thiểu kỳ vọng
+        if (request.SalaryMin.HasValue)
+        {
+            var min = request.SalaryMin.Value;
+
+            query = query.Where(j =>
+                j.SalaryMax.HasValue &&
+                j.SalaryMax.Value >= min);
+        }
+
+        // 8. Kỹ năng
+        if (!string.IsNullOrWhiteSpace(request.SkillId))
+        {
+            var skillId = request.SkillId.Trim();
+
+            query = query.Where(j =>
+                j.JobSkills.Any(js => js.SkillId == skillId));
+        }
+
+        // 9. Danh mục
+        if (!string.IsNullOrWhiteSpace(request.CategoryId))
+        {
+            var categoryId = request.CategoryId.Trim();
+
+            query = query.Where(j => j.CategoryId == categoryId);
+        }
+
+        // 10. Công ty
+        if (!string.IsNullOrWhiteSpace(request.CompanyId))
+        {
+            var companyId = request.CompanyId.Trim();
+
+            query = query.Where(j => j.CompanyId == companyId);
+        }
+
+        // 11. Đếm trước khi phân trang
+        var totalItems = await query.CountAsync();
+
+        // 12. Phân trang từ page = 0
+        var rows = await query
+            .OrderByDescending(j => j.CreatedAt)
+            .ThenBy(j => j.JobId)
+            .Skip((int)skipLong)
+            .Take(request.Size)
+            .Select(j => new
+            {
+                j.JobId,
+                j.Title,
+                j.CompanyId,
+                CompanyName = j.Company.Name,
+                j.CategoryId,
+                j.Location,
+                j.JobType,
+                j.Experience,
+                j.SalaryMin,
+                j.SalaryMax,
+                j.Deadline,
+                j.CreatedAt
+            })
+            .ToListAsync();
+
+        var items = rows.Select(j => new SearchJobItemResponse
+        {
+            JobId = j.JobId,
+            Title = j.Title,
+            CompanyId = j.CompanyId,
+            CompanyName = j.CompanyName,
+            CategoryId = j.CategoryId,
+            Location = j.Location,
+            JobType = j.JobType.ToString(),
+            Experience = j.Experience,
+            SalaryMin = j.SalaryMin,
+            SalaryMax = j.SalaryMax,
+            Deadline = j.Deadline,
+            CreatedAt = j.CreatedAt
+        }).ToList();
+
+        return new SearchJobsResponse
+        {
+            Items = items,
+            Page = request.Page,
+            Size = request.Size,
+            TotalItems = totalItems
+        };
+    }
 }

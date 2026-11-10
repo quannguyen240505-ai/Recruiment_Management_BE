@@ -87,4 +87,25 @@ public class JobsController : ControllerBase
             return StatusCode(403, new ProblemDetails { Title = "Lỗi Phân quyền", Detail = ex.Message, Status = 403 });
         }
     }
+
+    [HttpGet]
+    [AllowAnonymous]
+    public async Task<ActionResult<SearchJobsResponse>> SearchJobs(
+        [FromQuery] SearchJobsRequest request)
+    {
+        try
+        {
+            var result = await _jobService.SearchJobsAsync(request);
+            return Ok(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Tham số tìm kiếm không hợp lệ",
+                Detail = ex.Message,
+                Status = 400
+            });
+        }
+    }
 }

@@ -397,6 +397,180 @@ public class JobServiceTests : IDisposable
                 "REC-01", null, int.MaxValue, 100));
     }
 
+    [Fact]
+    public async Task SearchJobs_Keyword_IsCaseInsensitive()
+    {
+        var request = GetValidRequest();
+        request.Title = "SCRUM143 Backend Developer";
+
+        var created = await _jobService.CreateJobAsync(
+            request, "REC-01");
+
+        var result = await _jobService.SearchJobsAsync(
+            new SearchJobsRequest { Keyword = "bAcKeNd" });
+
+        Assert.Single(result.Items);
+        Assert.Equal(created.JobId, result.Items[0].JobId);
+    }
+
+    [Fact]
+    public async Task SearchJobs_ExcludesClosedExpiredDeletedJobs()
+    {
+        async Task<string> CreateTaggedJob(string title)
+        {
+            var request = GetValidRequest();
+            request.Title = title;
+
+            var created = await _jobService.CreateJobAsync(
+                request, "REC-01");
+
+            return created.JobId;
+        }
+
+        var activeId = await CreateTaggedJob("SCRUM143 Active");
+        var closedId = await CreateTaggedJob("SCRUM143 Closed");
+        var expiredId = await CreateTaggedJob("SCRUM143 Expired");
+        var deletedId = await CreateTaggedJob("SCRUM143 Deleted");
+
+        var closed = await _db.Jobs.FindAsync(closedId);
+        closed!.Status = JobStatus.CLOSED;
+
+        var expired = await _db.Jobs.FindAsync(expiredId);
+        expired!.Deadline = DateTime.UtcNow.AddDays(-2);
+
+        var deleted = await _db.Jobs.FindAsync(deletedId);
+        deleted!.DeletedAtUtc = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync();
+
+        var result = await _jobService.SearchJobsAsync(
+            new SearchJobsRequest { Keyword = "SCRUM143" });
+
+        Assert.Single(result.Items);
+        Assert.Equal(activeId, result.Items[0].JobId);
+    }
+
+    [Fact]
+    public async Task SearchJobs_CombinedFilters_UsesAnd()
+    {
+        var request = GetValidRequest();
+        request.Title = "SCRUM143 Backend Developer";
+        request.Location = "Hà Nội";
+
+        var created = await _jobService.CreateJobAsync(
+            request, "REC-01");
+
+        var filters = new SearchJobsRequest
+        {
+            Keyword = "SCRUM143",
+            Location = "Hà Nội",
+            JobType = JobType.FULL_TIME,
+            CategoryId = "CAT-01",
+            CompanyId = "COMP-01",
+            SkillId = "SKILL-01",
+            SalaryMin = 1500,
+            Page = 0,
+            Size = 20
+        };
+
+        var matched = await _jobService.SearchJobsAsync(filters);
+
+        Assert.Single(matched.Items);
+        Assert.Equal(created.JobId, matched.Items[0].JobId);
+
+        filters.Location = "Hồ Chí Minh";
+
+        var notMatched = await _jobService.SearchJobsAsync(filters);
+
+        Assert.Empty(notMatched.Items);
+        Assert.Equal(0, notMatched.TotalItems);
+    }
+
+    [Fact]
+    public async Task SearchJobs_Pagination_ReturnsCorrectPage()
+    {
+        for (int i = 0; i < 3; i++)
+        {
+            var request = GetValidRequest();
+            request.Title = $"SCRUM143 Page {i}";
+
+            await _jobService.CreateJobAsync(request, "REC-01");
+        }
+
+        var result = await _jobService.SearchJobsAsync(
+            new SearchJobsRequest
+            {
+                Keyword = "SCRUM143 Page",
+                Page = 1,
+                Size = 2
+            });
+
+        Assert.Equal(3, result.TotalItems);
+        Assert.Equal(1, result.Page);
+        Assert.Equal(2, result.Size);
+        Assert.Single(result.Items);
+    }
+
+    [Theory]
+    [InlineData(-1, 20)]
+    [InlineData(0, 0)]
+    [InlineData(0, 101)]
+    [InlineData(int.MaxValue, 2)]
+    public async Task SearchJobs_InvalidPagination_Throws(
+        int page, int size)
+    {
+        var request = new SearchJobsRequest
+        {
+            Page = page,
+            Size = size
+        };
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            _jobService.SearchJobsAsync(request));
+    }
+
+    [Fact]
+    public async Task SearchJobs_NegativeSalary_Throws()
+    {
+        var request = new SearchJobsRequest
+        {
+            SalaryMin = -1000
+        };
+
+        await Assert.ThrowsAsync<ArgumentException>(() =>
+            _jobService.SearchJobsAsync(request));
+    }
+
+    [Fact]
+    public async Task SearchJobs_NoMatches_ReturnsEmpty()
+    {
+        var result = await _jobService.SearchJobsAsync(
+            new SearchJobsRequest
+            {
+                Keyword = "XYZ-NOT-FOUND-999"
+            });
+
+        Assert.Empty(result.Items);
+        Assert.Equal(0, result.TotalItems);
+        Assert.Equal(0, result.Page);
+        Assert.Equal(20, result.Size);
+    }
+
+    [Fact]
+    public async Task SearchJobs_Keyword_MatchesCompanyName()
+    {
+        var result = await _jobService.SearchJobsAsync(
+            new SearchJobsRequest
+            {
+                Keyword = "test company"
+            });
+
+        Assert.NotEmpty(result.Items);
+
+        Assert.All(result.Items, item =>
+            Assert.Equal("Test Company", item.CompanyName));
+    }
+
     public void Dispose()
     {
         _db.Dispose();
