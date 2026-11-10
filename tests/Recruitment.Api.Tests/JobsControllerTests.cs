@@ -91,5 +91,10 @@ public class JobsControllerTests
             // Vì đây là Fake service dùng để test Controller, ta chỉ cần trả về một kết quả rỗng là đủ.
             return Task.FromResult(new PagedResult<JobSummaryResponse>());
         }
+        public Task<SearchJobsResponse> SearchJobsAsync(
+    SearchJobsRequest request)
+        {
+            return Task.FromResult(new SearchJobsResponse());
+        }
     }
 }
