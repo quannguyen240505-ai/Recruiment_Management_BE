@@ -73,6 +73,22 @@ Request JSON:
 
 Khi token hợp lệ và tài khoản được phép đăng nhập, API trả về JWT nội bộ.
 
+**Liên kết tài khoản local (SCRUM-152 / SCRUM-13 AC5):**
+
+- Google ID Token phải được xác minh chữ ký, audience, hạn dùng và email verified.
+- Nếu GoogleId đã liên kết, đăng nhập vào tài khoản đó.
+- Nếu email trùng tài khoản local ACTIVE chưa liên kết Google, dùng lại UserId,
+  Username, Role và PasswordHash hiện có; chỉ ghi GoogleId và UpdatedAtUtc.
+- Email được đối chiếu không phân biệt hoa/thường. Không tạo User mới khi liên kết.
+- Tài khoản LOCKED/DISABLED/deleted bị từ chối (401); liên kết với GoogleId khác
+  bị từ chối (409). Ghi có điều kiện để không ghi đè liên kết khi có yêu cầu đồng thời.
+- Email mới vẫn tạo Candidate như trước. Request/response không đổi; FE nhận
+  HTTP 200 và xử lý JWT, UserId, Role như một lần đăng nhập thông thường.
+
+QA cần chạy lại TC_025 (Google trùng email local) và TC_032 (mật khẩu local vẫn
+đăng nhập được), kiểm tra UserId/Role/PasswordHash và số lượng Users trước/sau.
+Không cần migration hoặc cấu hình ClientSecret mới.
+
 ## Cấu trúc thư mục
 ```
 Recruitment.sln
