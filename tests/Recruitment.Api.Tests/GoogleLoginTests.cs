@@ -1,6 +1,8 @@
 
 using Google.Apis.Auth;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
+using Recruitment.Api.Controllers;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -123,56 +125,210 @@ public class GoogleLoginTests
         Assert.False(string.IsNullOrWhiteSpace(secondLogin.AccessToken));
     }
 
-    [Fact]
-    public async Task GoogleLogin_EmailAlreadyExists_ShouldReject()
+    [Theory]
+    [InlineData("CANDIDATE")]
+    [InlineData("RECRUITER")]
+    [InlineData("ADMIN")]
+    public async Task GoogleLogin_LocalEmailMatch_ReusesAccountAndPreservesPassword(string role)
     {
         using var connection = new SqliteConnection("Data Source=:memory:");
         await connection.OpenAsync();
-
-        var options = new DbContextOptionsBuilder<AppDbContext>()
-            .UseSqlite(connection)
-            .Options;
-
-        await using var db = new AppDbContext(options);
+        await using var db = CreateDb(connection);
         await db.Database.EnsureCreatedAsync();
+        var user = CreateLocalUser(role);
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+        var originalHash = user.PasswordHash;
+        var originalCreatedAt = user.CreatedAtUtc;
+        db.ChangeTracker.Clear();
+        var service = CreateService(db);
 
-        // Tài khoản thường đã tồn tại
-        db.Users.Add(new User
+        var action = await new AuthController(service).GoogleLogin(
+            GoogleRequest(), CancellationToken.None);
+        var ok = Assert.IsType<OkObjectResult>(action.Result);
+        Assert.Equal(200, ok.StatusCode);
+        var first = Assert.IsType<LoginResponse>(ok.Value);
+        var second = await service.GoogleLoginAsync(GoogleRequest());
+        var local = await service.LoginAsync(new LoginRequest
+        {
+            Username = "existinguser", Password = "OriginalPassword123!"
+        });
+        var saved = await db.Users.AsNoTracking().SingleAsync();
+
+        Assert.Equal(user.UserId, first.UserId);
+        Assert.Equal(first.UserId, second.UserId);
+        Assert.Equal(first.UserId, local.UserId);
+        Assert.Equal(role, first.Role);
+        Assert.Equal(role, saved.RoleId);
+        Assert.Equal(originalHash, saved.PasswordHash);
+        Assert.Equal("Existing User", saved.FullName);
+        Assert.Equal(user.Email, saved.Email);
+        Assert.Equal(user.PhoneNumber, saved.PhoneNumber);
+        Assert.Equal(originalCreatedAt, saved.CreatedAtUtc);
+        Assert.Equal("google-user-456", saved.GoogleId);
+        Assert.NotNull(saved.UpdatedAtUtc);
+        Assert.False(string.IsNullOrWhiteSpace(first.AccessToken));
+    }
+
+    [Theory]
+    [InlineData(AccountStatus.LOCKED, false)]
+    [InlineData(AccountStatus.DISABLED, false)]
+    [InlineData(AccountStatus.ACTIVE, true)]
+    public async Task GoogleLogin_UnavailableLocalAccount_DoesNotLink(
+        AccountStatus status, bool deleted)
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var db = CreateDb(connection);
+        await db.Database.EnsureCreatedAsync();
+        var user = CreateLocalUser();
+        user.AccountStatus = status;
+        user.DeletedAtUtc = deleted ? DateTime.UtcNow : null;
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            CreateService(db).GoogleLoginAsync(GoogleRequest()));
+        Assert.Null((await db.Users.AsNoTracking().SingleAsync()).GoogleId);
+    }
+
+    [Fact]
+    public async Task GoogleLogin_LocalAccountLinkedToDifferentGoogle_DoesNotOverwrite()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var db = CreateDb(connection);
+        await db.Database.EnsureCreatedAsync();
+        var user = CreateLocalUser();
+        user.GoogleId = "different-google-subject";
+        db.Users.Add(user);
+        await db.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<RegistrationConflictException>(() =>
+            CreateService(db).GoogleLoginAsync(GoogleRequest()));
+        Assert.Equal("different-google-subject",
+            (await db.Users.AsNoTracking().SingleAsync()).GoogleId);
+    }
+
+    [Fact]
+    public async Task GoogleLogin_UnverifiedClaims_DoNotLinkLocalAccount()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var db = CreateDb(connection);
+        await db.Database.EnsureCreatedAsync();
+        db.Users.Add(CreateLocalUser());
+        await db.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+            CreateService(db, verified: false).GoogleLoginAsync(GoogleRequest()));
+        Assert.Null((await db.Users.AsNoTracking().SingleAsync()).GoogleId);
+    }
+
+    [Theory]
+    [InlineData("same")]
+    [InlineData("different")]
+    [InlineData("locked")]
+    [InlineData("deleted")]
+    public async Task GoogleLogin_ConcurrentChangeBeforeLink_IsNotOverwritten(string change)
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        await using var competingDb = CreateDb(connection);
+        await competingDb.Database.EnsureCreatedAsync();
+        var user = CreateLocalUser();
+        competingDb.Users.Add(user);
+        await competingDb.SaveChangesAsync();
+        competingDb.ChangeTracker.Clear();
+
+        // Simulate another request committing after lookup but before conditional UPDATE.
+        var interceptor = new BeforeLinkInterceptor(async () =>
+        {
+            if (change is "same" or "different")
+                await competingDb.Users.ExecuteUpdateAsync(setters => setters
+                    .SetProperty(u => u.GoogleId,
+                        change == "same" ? "google-user-456" : "other-google-id"));
+            else if (change == "locked")
+                await competingDb.Users.ExecuteUpdateAsync(setters => setters
+                    .SetProperty(u => u.AccountStatus, AccountStatus.LOCKED));
+            else
+                await competingDb.Users.ExecuteUpdateAsync(setters => setters
+                    .SetProperty(u => u.DeletedAtUtc, DateTime.UtcNow));
+        });
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseSqlite(connection).AddInterceptors(interceptor).Options;
+        await using var db = new AppDbContext(options);
+        var service = CreateService(db);
+
+        if (change == "same")
+            Assert.Equal(user.UserId, (await service.GoogleLoginAsync(GoogleRequest())).UserId);
+        else if (change == "different")
+            await Assert.ThrowsAsync<RegistrationConflictException>(() =>
+                service.GoogleLoginAsync(GoogleRequest()));
+        else
+            await Assert.ThrowsAsync<UnauthorizedAccessException>(() =>
+                service.GoogleLoginAsync(GoogleRequest()));
+
+        Assert.True(interceptor.Ran);
+        var saved = await competingDb.Users.AsNoTracking().SingleAsync();
+        Assert.Equal(user.PasswordHash, saved.PasswordHash);
+        Assert.Equal(change == "same" ? "google-user-456" :
+            change == "different" ? "other-google-id" : null, saved.GoogleId);
+    }
+
+    private static AppDbContext CreateDb(SqliteConnection connection) =>
+        new(new DbContextOptionsBuilder<AppDbContext>().UseSqlite(connection).Options);
+
+    private static User CreateLocalUser(string role = "CANDIDATE")
+    {
+        var user = new User
         {
             UserId = Guid.NewGuid().ToString(),
             Username = "existinguser",
-            Email = "existing@gmail.com",
+            Email = "Existing@Gmail.com",
             FullName = "Existing User",
-            PasswordHash = "existing-password-hash",
-            RoleId = "CANDIDATE"
-        });
-
-        await db.SaveChangesAsync();
-
-        // Google trả về email trùng tài khoản thường
-        var payload = new GoogleJsonWebSignature.Payload
-        {
-            Subject = "google-user-456",
-            Email = "existing@gmail.com",
-            EmailVerified = true,
-            Name = "Google User"
+            PhoneNumber = "0901234567",
+            RoleId = role
         };
+        user.PasswordHash = new PasswordHasher<User>().HashPassword(user, "OriginalPassword123!");
+        return user;
+    }
 
-        var service = new AuthService(
-            db,
-            new PasswordHasher<User>(),
-            new JwtTokenService(new ConfigurationBuilder().Build()),
-            new FakeGoogleTokenValidator(payload));
+    private static GoogleLoginRequest GoogleRequest() => new() { IdToken = "fake-test-token" };
 
-        await Assert.ThrowsAsync<RegistrationConflictException>(
-            () => service.GoogleLoginAsync(new GoogleLoginRequest
+    private static AuthService CreateService(AppDbContext db, bool verified = true) =>
+        new(db, new PasswordHasher<User>(),
+            new JwtTokenService(new ConfigurationBuilder().AddInMemoryCollection(
+                new Dictionary<string, string?>
+                {
+                    ["Jwt:Key"] = "0123456789abcdef0123456789abcdef",
+                    ["Jwt:Issuer"] = "RecruitmentApi",
+                    ["Jwt:Audience"] = "RecruitmentClient"
+                }).Build()),
+            new FakeGoogleTokenValidator(new GoogleJsonWebSignature.Payload
             {
-                IdToken = "fake-test-token"
+                Subject = "google-user-456", Email = "  EXISTING@gmail.com  ",
+                EmailVerified = verified, Name = "Google User"
             }));
 
-        // Không tạo mới hoặc tự liên kết tài khoản
-        Assert.Equal(1, await db.Users.CountAsync());
-        Assert.Null((await db.Users.SingleAsync()).GoogleId);
+    private sealed class BeforeLinkInterceptor(Func<Task> beforeLink)
+        : Microsoft.EntityFrameworkCore.Diagnostics.DbCommandInterceptor
+    {
+        public bool Ran { get; private set; }
+
+        public override async ValueTask<Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int>>
+            NonQueryExecutingAsync(System.Data.Common.DbCommand command,
+                Microsoft.EntityFrameworkCore.Diagnostics.CommandEventData eventData,
+                Microsoft.EntityFrameworkCore.Diagnostics.InterceptionResult<int> result,
+                CancellationToken cancellationToken = default)
+        {
+            if (!Ran && command.CommandText.StartsWith("UPDATE "))
+            {
+                Ran = true;
+                await beforeLink();
+            }
+            return result;
+        }
     }
 
     [Theory]

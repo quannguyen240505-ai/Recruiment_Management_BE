@@ -193,65 +193,13 @@ public class AuthService : IAuthService
         var payload = await _googleTokenValidator.ValidateAsync(
             request.IdToken);
 
-        var googleId = payload.Subject;
-        var email = payload.Email.Trim().ToLowerInvariant();
+        GoogleTokenValidator.ValidateGoogleClaims(payload);
 
-        // 2. Tìm tài khoản đã liên kết Google
-        var user = await _db.Users.SingleOrDefaultAsync(
-            u => u.GoogleId == googleId,
+        var user = await ResolveGoogleUserAsync(
+            payload.Subject,
+            payload.Email.Trim().ToLowerInvariant(),
+            payload.Name,
             cancellationToken);
-
-        if (user == null)
-        {
-            // Không tự động liên kết chỉ vì trùng email
-            var emailExists = await _db.Users.AnyAsync(
-                u => u.Email == email,
-                cancellationToken);
-
-            if (emailExists)
-                throw new RegistrationConflictException(
-                    "Email đã được sử dụng bởi tài khoản khác.");
-
-            // 3. Tạo tài khoản Google lần đầu
-            var fullName = string.IsNullOrWhiteSpace(payload.Name)
-                ? email
-                : payload.Name.Trim();
-
-            user = new User
-            {
-                UserId = Guid.NewGuid().ToString(),
-                Username = "google_" + Guid.NewGuid().ToString("N"),
-                Email = email,
-                FullName = fullName[..Math.Min(fullName.Length, 200)],
-                GoogleId = googleId,
-                PasswordHash = null,
-                RoleId = "CANDIDATE",
-                AccountStatus = AccountStatus.ACTIVE,
-                CreatedAtUtc = DateTime.UtcNow
-            };
-
-            _db.Users.Add(user);
-
-            try
-            {
-                await _db.SaveChangesAsync(cancellationToken);
-            }
-            catch (DbUpdateException ex)
-                when (ex.InnerException is SqlException sqlEx &&
-                      (sqlEx.Number == 2601 || sqlEx.Number == 2627))
-            {
-                throw new RegistrationConflictException(
-                    "Tài khoản Google hoặc email đã tồn tại.");
-            }
-        }
-
-        // 4. Kiểm tra trạng thái tài khoản
-        if (user.AccountStatus != AccountStatus.ACTIVE ||
-            user.DeletedAtUtc != null)
-        {
-            throw new UnauthorizedAccessException(
-                "Tài khoản không khả dụng.");
-        }
 
         // 5. Cấp JWT nội bộ
         var (token, expiresAt) = _jwtTokenService.CreateToken(user);
@@ -265,6 +213,109 @@ public class AuthService : IAuthService
             Username = user.Username,
             Role = user.RoleId
         };
+    }
+
+    private async Task<User> ResolveGoogleUserAsync(
+        string googleId,
+        string email,
+        string? name,
+        CancellationToken cancellationToken)
+    {
+        // Retry resolution after a competing insert wins a unique constraint.
+        for (var attempt = 0; attempt < 3; attempt++)
+        {
+            var user = await _db.Users.AsNoTracking().SingleOrDefaultAsync(
+                u => u.GoogleId == googleId, cancellationToken);
+
+            if (user != null)
+            {
+                EnsureGoogleAccountAvailable(user);
+                return user;
+            }
+
+            // Registration normalizes email; ToLower also covers legacy mixed-case rows.
+            user = await _db.Users.AsNoTracking().SingleOrDefaultAsync(
+                u => u.Email.ToLower() == email, cancellationToken);
+
+            if (user != null)
+            {
+                EnsureGoogleAccountAvailable(user);
+                if (user.GoogleId != null && user.GoogleId != googleId)
+                    throw new RegistrationConflictException(
+                        "Tài khoản đã liên kết với Google khác.");
+
+                // Conditional update prevents concurrent requests overwriting another link.
+                // PasswordHash, RoleId and profile data are never modified by linking.
+                try
+                {
+                    await _db.Users
+                        .Where(u => u.UserId == user.UserId &&
+                                    u.GoogleId == null &&
+                                    u.Email.ToLower() == email &&
+                                    u.AccountStatus == AccountStatus.ACTIVE &&
+                                    u.DeletedAtUtc == null)
+                        .ExecuteUpdateAsync(setters => setters
+                            .SetProperty(u => u.GoogleId, googleId)
+                            .SetProperty(u => u.UpdatedAtUtc, DateTime.UtcNow),
+                            cancellationToken);
+                }
+                catch (DbUpdateException ex) when (IsUniqueConflict(ex.InnerException))
+                {
+                    continue;
+                }
+                catch (SqlException ex) when (IsUniqueConflict(ex))
+                {
+                    continue;
+                }
+
+                user = await _db.Users.AsNoTracking().SingleAsync(
+                    u => u.UserId == user.UserId, cancellationToken);
+                EnsureGoogleAccountAvailable(user);
+                if (user.GoogleId != googleId)
+                    throw new RegistrationConflictException(
+                        "Tài khoản đã liên kết với Google khác.");
+
+                return user;
+            }
+
+            var fullName = string.IsNullOrWhiteSpace(name) ? email : name.Trim();
+            user = new User
+            {
+                UserId = Guid.NewGuid().ToString(),
+                Username = "google_" + Guid.NewGuid().ToString("N"),
+                Email = email,
+                FullName = fullName[..Math.Min(fullName.Length, 200)],
+                GoogleId = googleId,
+                PasswordHash = null,
+                RoleId = "CANDIDATE",
+                AccountStatus = AccountStatus.ACTIVE,
+                CreatedAtUtc = DateTime.UtcNow
+            };
+            _db.Users.Add(user);
+
+            try
+            {
+                await _db.SaveChangesAsync(cancellationToken);
+                return user;
+            }
+            catch (DbUpdateException ex)
+                when (IsUniqueConflict(ex.InnerException))
+            {
+                _db.Entry(user).State = EntityState.Detached;
+            }
+        }
+
+        throw new RegistrationConflictException(
+            "Tài khoản Google hoặc email vừa được cập nhật. Vui lòng thử lại.");
+    }
+
+    private static bool IsUniqueConflict(Exception? exception) =>
+        exception is SqlException { Number: 2601 or 2627 };
+
+    private static void EnsureGoogleAccountAvailable(User user)
+    {
+        if (user.AccountStatus != AccountStatus.ACTIVE || user.DeletedAtUtc != null)
+            throw new UnauthorizedAccessException("Tài khoản không khả dụng.");
     }
 
 }
