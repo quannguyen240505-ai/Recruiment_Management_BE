@@ -8,6 +8,9 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Recruitment.Api.Data;
 using Recruitment.Api.Services.Auth;
+using Microsoft.AspNetCore.Identity;
+using Recruitment.Api.Entities;
+using Recruitment.Api.Dtos.Auth;
 
 namespace Recruitment.Api.Tests;
 
@@ -24,6 +27,135 @@ public sealed class PasswordResetHttpTests
         var body = await response.Content.ReadAsStringAsync();
         Assert.Contains("message", body);
         Assert.DoesNotContain("token", body, StringComparison.OrdinalIgnoreCase);
+    }
+    [Fact]
+    public async Task ForgotResetLogin_FullFlow_ShouldSucceed()
+    {
+        using var factory = new ApiFactory();
+
+        using var client = factory.CreateClient(new()
+        {
+            BaseAddress = new Uri("https://localhost")
+        });
+
+        await factory.CreateSchema();
+
+        const string oldPassword = "OriginalPassword123!";
+        const string newPassword = "NewPassword456!";
+
+        // Arrange: Create test account
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider
+                .GetRequiredService<AppDbContext>();
+
+            var hasher = scope.ServiceProvider
+                .GetRequiredService<IPasswordHasher<User>>();
+
+            var user = new User
+            {
+                UserId = "reset-integration-user",
+                Username = "resetintegration",
+                Email = "reset@example.com",
+                FullName = "Reset Integration",
+                RoleId = "CANDIDATE",
+                AccountStatus = AccountStatus.ACTIVE
+            };
+
+            user.PasswordHash =
+                hasher.HashPassword(user, oldPassword);
+
+            db.Users.Add(user);
+            await db.SaveChangesAsync();
+        }
+
+        // Verify old password works before reset
+        var originalLogin = await client.PostAsJsonAsync(
+            "/api/auth/login",
+            new
+            {
+                username = "resetintegration",
+                password = oldPassword
+            });
+
+        Assert.Equal(HttpStatusCode.OK,
+            originalLogin.StatusCode);
+
+        // Step 1: Request password reset
+        var forgot = await client.PostAsJsonAsync(
+            "/api/auth/forgot-password",
+            new { email = "reset@example.com" });
+
+        Assert.Equal(HttpStatusCode.Accepted,
+            forgot.StatusCode);
+
+        // Step 2: Deliver email using fake sender
+        using (var scope = factory.Services.CreateScope())
+        {
+            var delivery = scope.ServiceProvider
+                .GetRequiredService<PasswordResetDeliveryService>();
+
+            await delivery.DeliverPendingAsync(default);
+        }
+
+        var sender = (ConfiguredSender)factory.Services
+            .GetRequiredService<IPasswordResetEmailSender>();
+
+        var token = Assert.Single(sender.Tokens);
+
+        // Step 3: Reset password
+        var resetRequest = new
+        {
+            token,
+            newPassword,
+            confirmPassword = newPassword
+        };
+
+        var reset = await client.PostAsJsonAsync(
+            "/api/auth/reset-password",
+            resetRequest);
+
+        Assert.Equal(HttpStatusCode.NoContent,
+            reset.StatusCode);
+
+        // Step 4: Old password must be rejected
+        var oldLogin = await client.PostAsJsonAsync(
+            "/api/auth/login",
+            new
+            {
+                username = "resetintegration",
+                password = oldPassword
+            });
+
+        Assert.Equal(HttpStatusCode.Unauthorized,
+            oldLogin.StatusCode);
+
+        // Step 5: New password must work
+        var newLogin = await client.PostAsJsonAsync(
+            "/api/auth/login",
+            new
+            {
+                username = "resetintegration",
+                password = newPassword
+            });
+
+        Assert.Equal(HttpStatusCode.OK,
+            newLogin.StatusCode);
+
+        var loginData = await newLogin.Content
+            .ReadFromJsonAsync<LoginResponse>();
+
+        Assert.NotNull(loginData);
+        Assert.False(
+            string.IsNullOrWhiteSpace(loginData.AccessToken));
+
+        // Step 6: Token cannot be reused
+        var replay = await client.PostAsJsonAsync(
+            "/api/auth/reset-password",
+            resetRequest);
+
+        Assert.Equal(HttpStatusCode.BadRequest,
+            replay.StatusCode);
     }
 
     [Fact]
@@ -84,9 +216,21 @@ public sealed class PasswordResetHttpTests
         }
     }
 
-    private sealed class ConfiguredSender : IPasswordResetEmailSender
+    private sealed class ConfiguredSender
+    : IPasswordResetEmailSender
     {
         public bool IsConfigured => true;
-        public Task SendAsync(string email, string token, CancellationToken cancellationToken) => Task.CompletedTask;
+
+        public List<string> Tokens { get; } = new();
+
+        public Task SendAsync(
+            string email,
+            string token,
+            CancellationToken cancellationToken)
+        {
+            Tokens.Add(token);
+
+            return Task.CompletedTask;
+        }
     }
 }
