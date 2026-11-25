@@ -10,4 +10,8 @@ public interface IJobService
     Task<JobDetailResponse?> GetJobDetailAsync(string jobId);
     Task<PagedResult<JobSummaryResponse>> GetMyJobsAsync(string recruiterId, JobStatus? status, int page, int pageSize);
     Task<SearchJobsResponse> SearchJobsAsync(SearchJobsRequest request);
+    Task<JobResponse> UpdateJobAsync(
+        string jobId,
+        UpdateJobRequest request,
+        string recruiterId);
 }

@@ -366,4 +366,173 @@ public class JobService : IJobService
             TotalItems = totalItems
         };
     }
+
+    public async Task<JobResponse> UpdateJobAsync(
+        string jobId,
+        UpdateJobRequest request,
+        string recruiterId)
+    {
+        // 1. Kiểm tra tài khoản Recruiter
+        var recruiter = await _context.Users
+            .FirstOrDefaultAsync(u => u.UserId == recruiterId);
+
+        if (recruiter == null ||
+            recruiter.RoleId != "RECRUITER" ||
+            recruiter.AccountStatus != AccountStatus.ACTIVE ||
+            recruiter.DeletedAtUtc != null)
+        {
+            throw new UnauthorizedAccessException(
+                "Tài khoản không có quyền cập nhật Job.");
+        }
+
+        // 2. Tìm Job và các kỹ năng hiện tại
+        var job = await _context.Jobs
+            .Include(j => j.JobSkills)
+            .FirstOrDefaultAsync(j =>
+                j.JobId == jobId &&
+                j.DeletedAtUtc == null);
+
+        if (job == null)
+            throw new KeyNotFoundException(
+                "Không tìm thấy Job.");
+
+        // 3. Kiểm tra quyền sở hữu
+        if (job.RecruiterId != recruiterId)
+            throw new UnauthorizedAccessException(
+                "Bạn không có quyền sửa Job này.");
+
+        // 4. Kiểm tra trạng thái hiện tại
+        if (job.Status == JobStatus.CLOSED)
+            throw new InvalidOperationException(
+                "Không thể chỉnh sửa Job đã đóng.");
+
+        if (job.Deadline.Date <= DateTime.UtcNow.Date)
+            throw new InvalidOperationException(
+                "Không thể chỉnh sửa Job đã hết hạn.");
+
+        // 5. Validate các trường bắt buộc
+        if (string.IsNullOrWhiteSpace(request.Title) ||
+            string.IsNullOrWhiteSpace(request.Description) ||
+            string.IsNullOrWhiteSpace(request.Requirements) ||
+            string.IsNullOrWhiteSpace(request.Location) ||
+            string.IsNullOrWhiteSpace(request.Experience) ||
+            string.IsNullOrWhiteSpace(request.CategoryId))
+        {
+            throw new ArgumentException(
+                "Các trường bắt buộc không được để trống.");
+        }
+
+        // 6. Validate loại công việc
+        if (!request.JobType.HasValue ||
+            !Enum.IsDefined(typeof(JobType), request.JobType.Value))
+        {
+            throw new ArgumentException(
+                "JobType không hợp lệ.");
+        }
+
+        // 7. Validate số lượng tuyển dụng
+        if (request.NumberOfPositions < 1)
+            throw new ArgumentException(
+                "Số lượng tuyển dụng phải >= 1.");
+
+        // 8. Validate lương
+        if (request.SalaryMin < 0 ||
+            request.SalaryMax < 0)
+        {
+            throw new ArgumentException(
+                "Lương không được âm.");
+        }
+
+        if (request.SalaryMin.HasValue &&
+            request.SalaryMax.HasValue &&
+            request.SalaryMax < request.SalaryMin)
+        {
+            throw new ArgumentException(
+                "SalaryMax phải >= SalaryMin.");
+        }
+
+        // 9. Validate deadline mới
+        if (request.Deadline.Date <= DateTime.UtcNow.Date)
+            throw new ArgumentException(
+                "Deadline phải lớn hơn ngày hiện tại.");
+
+        // 10. Validate Category
+        var categoryExists = await _context.Categories
+            .AnyAsync(c => c.CategoryId == request.CategoryId);
+
+        if (!categoryExists)
+            throw new ArgumentException(
+                "Category không tồn tại.");
+
+        // 11. Validate Skills
+        if (request.SkillIds == null ||
+            request.SkillIds.Count == 0 ||
+            request.SkillIds.Any(string.IsNullOrWhiteSpace))
+        {
+            throw new ArgumentException(
+                "Phải chọn ít nhất một Skill hợp lệ.");
+        }
+
+        var selectedSkills = request.SkillIds.ToHashSet();
+
+        if (selectedSkills.Count != request.SkillIds.Count)
+            throw new ArgumentException(
+                "SkillIds không được trùng nhau.");
+
+        var validSkillCount = await _context.Skills
+            .CountAsync(s => selectedSkills.Contains(s.SkillId));
+
+        if (validSkillCount != selectedSkills.Count)
+            throw new ArgumentException(
+                "Có Skill không tồn tại.");
+
+        // 12. Cập nhật các trường được phép
+        job.Title = request.Title.Trim();
+        job.Description = request.Description;
+        job.Requirements = request.Requirements;
+        job.Location = request.Location.Trim();
+        job.JobType = request.JobType.Value;
+        job.Experience = request.Experience;
+        job.NumberOfPositions = request.NumberOfPositions;
+        job.SalaryMin = request.SalaryMin;
+        job.SalaryMax = request.SalaryMax;
+        job.Deadline = request.Deadline;
+        job.CategoryId = request.CategoryId;
+
+        // Không thay đổi RecruiterId, CompanyId, Status
+
+        // 13. Đồng bộ JobSkills
+        var existingSkills = job.JobSkills
+            .Select(js => js.SkillId)
+            .ToHashSet();
+
+        var skillsToRemove = job.JobSkills
+            .Where(js => !selectedSkills.Contains(js.SkillId))
+            .ToList();
+
+        _context.JobSkills.RemoveRange(skillsToRemove);
+
+        foreach (var skillId in selectedSkills)
+        {
+            if (!existingSkills.Contains(skillId))
+            {
+                _context.JobSkills.Add(new JobSkill
+                {
+                    JobId = job.JobId,
+                    SkillId = skillId
+                });
+            }
+        }
+
+        // 14. Lưu xuống database
+        await _context.SaveChangesAsync();
+
+        return new JobResponse
+        {
+            JobId = job.JobId,
+            Title = job.Title,
+            Status = job.Status.ToString(),
+            CreatedAt = job.CreatedAt
+        };
+    }
 }
