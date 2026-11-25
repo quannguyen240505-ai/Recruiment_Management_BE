@@ -1,3 +1,5 @@
+using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.RateLimiting;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
@@ -63,6 +65,29 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<JwtTokenService>();
 builder.Services.AddScoped<IGoogleTokenValidator, GoogleTokenValidator>();
 
+builder.Services.AddDataProtection();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddOptions<PasswordResetOptions>()
+    .Bind(builder.Configuration.GetSection("PasswordReset"))
+    .Validate(o => o.TokenLifetimeMinutes is >= 1 and <= 60, "Token lifetime must be 1–60 minutes.")
+    .Validate(o => o.SmtpPort is >= 1 and <= 65535, "SMTP port is invalid.")
+    .ValidateOnStart();
+builder.Services.AddScoped<IPasswordResetEmailSender, SmtpPasswordResetEmailSender>();
+builder.Services.AddScoped<IPasswordResetService, PasswordResetService>();
+builder.Services.AddScoped<PasswordResetDeliveryService>();
+builder.Services.AddHostedService<PasswordResetDeliveryWorker>();
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("password-reset", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0
+            }));
+});
+
 // --- CẤU HÌNH CORS (Cho phép Angular gọi API) ---
 builder.Services.AddCors(options =>
 {
@@ -119,7 +144,10 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+app.UseRouting();
 app.UseCors("AllowAngular");
+
+app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseAuthorization(); // Đã xóa dòng bị lặp lại
@@ -128,3 +156,6 @@ app.MapControllers();
 app.MapHealthChecks("/health");   // dùng cho kiểm tra hạ tầng / CI
 
 app.Run();
+
+// Entry point exposed for in-process HTTP integration tests.
+public partial class Program { }
