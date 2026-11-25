@@ -74,6 +74,9 @@ public class JobsControllerTests
             _job = job;
         }
 
+        public Task<JobDetailResponse?> GetRecruiterJobDetailAsync(string jobId, string recruiterId)
+            => throw new NotSupportedException();
+
         public Task<JobDetailResponse?> GetJobDetailAsync(string jobId)
         {
             return Task.FromResult(_job);

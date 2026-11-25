@@ -109,6 +109,28 @@ public class JobsController : ControllerBase
         }
     }
 
+    // SCRUM-190: Preload Edit Job (Recruiter owner only).
+    [HttpGet("/api/recruiter/jobs/{jobId}")]
+    [Authorize(Policy = "RequireRecruiterRole")]
+    public async Task<IActionResult> GetRecruiterJobDetail(string jobId)
+    {
+        var recruiterId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrWhiteSpace(recruiterId)) return Unauthorized();
+        try
+        {
+            var result = await _jobService.GetRecruiterJobDetailAsync(jobId, recruiterId);
+            if (result == null) return NotFound(new { code = "JOB_NOT_FOUND" });
+            return Ok(result);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            return StatusCode(403, new ProblemDetails
+            {
+                Title = "KhÃ´ng cÃ³ quyá»n xem Job", Status = 403
+            });
+        }
+    }
+
     [HttpPut("/api/recruiter/jobs/{jobId}")]
     [Authorize(Policy = "RequireRecruiterRole")]
     public async Task<IActionResult> UpdateJob(
