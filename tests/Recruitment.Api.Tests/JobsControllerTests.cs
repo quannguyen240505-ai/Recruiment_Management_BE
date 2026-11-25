@@ -96,5 +96,13 @@ public class JobsControllerTests
         {
             return Task.FromResult(new SearchJobsResponse());
         }
+
+        public Task<JobResponse> UpdateJobAsync(
+            string jobId,
+            UpdateJobRequest request,
+            string recruiterId)
+        {
+            throw new NotImplementedException();
+        }
     }
 }

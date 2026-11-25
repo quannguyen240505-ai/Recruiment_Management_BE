@@ -108,4 +108,63 @@ public class JobsController : ControllerBase
             });
         }
     }
+
+    [HttpPut("/api/recruiter/jobs/{jobId}")]
+    [Authorize(Policy = "RequireRecruiterRole")]
+    public async Task<IActionResult> UpdateJob(
+        string jobId,
+        [FromBody] UpdateJobRequest request)
+    {
+        var recruiterId = User.FindFirstValue(
+            ClaimTypes.NameIdentifier);
+
+        if (string.IsNullOrEmpty(recruiterId))
+            return Unauthorized();
+
+        try
+        {
+            var result = await _jobService.UpdateJobAsync(
+                jobId,
+                request,
+                recruiterId);
+
+            return Ok(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new ProblemDetails
+            {
+                Title = "Dữ liệu không hợp lệ",
+                Detail = ex.Message,
+                Status = 400
+            });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new ProblemDetails
+            {
+                Title = "Không tìm thấy Job",
+                Detail = ex.Message,
+                Status = 404
+            });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return StatusCode(403, new ProblemDetails
+            {
+                Title = "Không có quyền chỉnh sửa",
+                Detail = ex.Message,
+                Status = 403
+            });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new ProblemDetails
+            {
+                Title = "Không thể cập nhật Job",
+                Detail = ex.Message,
+                Status = 409
+            });
+        }
+    }
 }
