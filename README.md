@@ -112,3 +112,8 @@ Namespace dạng `Recruitment.Api.<Thư mục>`.
 ## Việc tiếp theo
 - SCRUM-128: Authentication schema và EF Core migrations
 - SCRUM-129: JWT validation, CORS và API conventions
+
+## Quên mật khẩu – SCRUM-157
+
+API request/reset, migration và cấu hình email: [hướng dẫn SCRUM-157](docs/SCRUM-157.md).
+Backend không trả token khôi phục trong response; cần cấu hình SMTP và apply migration.

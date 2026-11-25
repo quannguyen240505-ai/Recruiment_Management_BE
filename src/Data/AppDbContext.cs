@@ -7,6 +7,8 @@ public class AppDbContext : DbContext
 {
     public AppDbContext(DbContextOptions<AppDbContext> options) : base(options) { }
 
+    public DbSet<PasswordResetRequest> PasswordResetRequests => Set<PasswordResetRequest>();
+
     public DbSet<User> Users => Set<User>();
     public DbSet<Role> Roles => Set<Role>();
     public DbSet<Company> Companies => Set<Company>();
@@ -43,6 +45,19 @@ public class AppDbContext : DbContext
                 e.Property(x => x.SalaryMin).HasColumnType("decimal(18,2)");
                 e.Property(x => x.SalaryMax).HasColumnType("decimal(18,2)");
             });
+        });
+
+        modelBuilder.Entity<PasswordResetRequest>(e =>
+        {
+            e.ToTable("PasswordResetRequests");
+            e.HasKey(r => r.ResetRequestId);
+            e.Property(r => r.ResetRequestId).HasMaxLength(36);
+            e.Property(r => r.TokenHash).HasMaxLength(64).IsRequired();
+            e.HasIndex(r => r.TokenHash).IsUnique();
+            e.Property(r => r.PasswordHashAtIssue).HasMaxLength(512).IsRequired();
+            e.Property(r => r.EmailAtIssue).HasMaxLength(256).IsRequired();
+            e.HasIndex(r => new { r.DeliveredAtUtc, r.NextDeliveryAtUtc });
+            e.HasOne<User>().WithMany().HasForeignKey(r => r.UserId).OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<User>(e =>
