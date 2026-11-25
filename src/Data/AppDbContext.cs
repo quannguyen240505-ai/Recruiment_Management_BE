@@ -14,9 +14,27 @@ public class AppDbContext : DbContext
     public DbSet<Skill> Skills => Set<Skill>();
     public DbSet<Job> Jobs => Set<Job>();
     public DbSet<JobSkill> JobSkills => Set<JobSkill>();
+    public DbSet<CandidateCv> CandidateCvs => Set<CandidateCv>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        // SCRUM-169: Keep historical CV versions for Application records.
+        modelBuilder.Entity<CandidateCv>(e =>
+        {
+            e.ToTable("CandidateCvs");
+            e.HasKey(x => x.CvId);
+            e.Property(x => x.CvId).HasMaxLength(32);
+            e.Property(x => x.UserId).IsRequired().HasMaxLength(450);
+            e.Property(x => x.OriginalFileName).IsRequired().HasMaxLength(255);
+            e.Property(x => x.StorageKey).IsRequired().HasMaxLength(128);
+            e.Property(x => x.ContentType).IsRequired().HasMaxLength(100);
+            e.Property(x => x.ReplacedByCvId).HasMaxLength(32);
+            e.HasIndex(x => new { x.UserId, x.DeletedAtUtc });
+            e.HasIndex(x => x.StorageKey).IsUnique();
+            e.HasOne(x => x.User).WithMany().HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
         modelBuilder.Entity<Role>(e =>
         {
             e.ToTable("Role");

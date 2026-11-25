@@ -27,3 +27,6 @@ TestResults/
 # OS
 .DS_Store
 Thumbs.db
+
+# SCRUM-169: private Candidate CV files (outside wwwroot)
+**/PrivateFiles/
