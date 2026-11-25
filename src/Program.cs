@@ -10,6 +10,7 @@ using System.Text;
 using Microsoft.OpenApi.Models;
 using Recruitment.Api.Services.Auth;
 using Recruitment.Api.Services.Jobs;
+using Recruitment.Api.Services.Cvs;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -104,6 +105,7 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddProblemDetails();
 
 builder.Services.AddScoped<IJobService, JobService>();
+builder.Services.AddScoped<ICvService, CvService>();
 
 var app = builder.Build();
 
