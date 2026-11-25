@@ -4,6 +4,7 @@ namespace Recruitment.Api.Dtos.Job;
 public class JobDetailResponse
 {
     public string JobId { get; set; } = string.Empty;
+    public string CategoryId { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;
     public string Requirements { get; set; } = string.Empty;

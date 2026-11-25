@@ -159,6 +159,9 @@ public class UpdateJobControllerTests
         public Task<JobResponse> CreateJobAsync(CreateJobRequest request, string recruiterId)
             => throw new NotSupportedException();
 
+        public Task<JobDetailResponse?> GetRecruiterJobDetailAsync(string jobId, string recruiterId)
+            => throw new NotSupportedException();
+
         public Task<JobDetailResponse?> GetJobDetailAsync(string jobId)
             => throw new NotSupportedException();
 

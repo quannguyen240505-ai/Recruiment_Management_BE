@@ -123,6 +123,7 @@ public class JobService : IJobService
         return new JobDetailResponse
         {
             JobId = job.JobId,
+            CategoryId = job.CategoryId,
             Title = job.Title,
             Description = job.Description,
             Requirements = job.Requirements,
@@ -155,6 +156,57 @@ public class JobService : IJobService
                 .ToList()
         };
     }
+    // SCRUM-190: Read owner-only job for editing. Unlike public GET, includes PAUSED/CLOSED/expired.
+    public async Task<JobDetailResponse?> GetRecruiterJobDetailAsync(string jobId, string recruiterId)
+    {
+        if (string.IsNullOrWhiteSpace(jobId)) return null;
+
+        var recruiter = await _context.Users.AsNoTracking()
+            .FirstOrDefaultAsync(u => u.UserId == recruiterId);
+        if (recruiter == null || recruiter.RoleId != "RECRUITER" ||
+            recruiter.AccountStatus != AccountStatus.ACTIVE || recruiter.DeletedAtUtc != null)
+            throw new UnauthorizedAccessException("TÃ i khoáº£n khÃ´ng cÃ³ quyá»n Ä‘á»c Job.");
+
+        // A different Recruiter's Job is intentionally indistinguishable from a missing Job.
+        var job = await _context.Jobs.AsNoTracking()
+            .Include(j => j.Company)
+            .Include(j => j.JobSkills).ThenInclude(js => js.Skill)
+            .FirstOrDefaultAsync(j => j.JobId == jobId &&
+                j.RecruiterId == recruiterId && j.DeletedAtUtc == null);
+        if (job == null) return null;
+
+        return new JobDetailResponse
+        {
+            JobId = job.JobId,
+            CategoryId = job.CategoryId,
+            Title = job.Title,
+            Description = job.Description,
+            Requirements = job.Requirements,
+            Location = job.Location,
+            JobType = job.JobType.ToString(),
+            Experience = job.Experience,
+            NumberOfPositions = job.NumberOfPositions,
+            SalaryMin = job.SalaryMin,
+            SalaryMax = job.SalaryMax,
+            Deadline = job.Deadline,
+            Status = job.Status.ToString(),
+            CreatedAt = job.CreatedAt,
+            Company = new JobCompanyResponse
+            {
+                CompanyId = job.Company.CompanyId,
+                Name = job.Company.Name,
+                Website = job.Company.Website,
+                Address = job.Company.Address,
+                Description = job.Company.Description
+            },
+            Skills = job.JobSkills.Select(js => new JobSkillResponse
+            {
+                SkillId = js.SkillId,
+                Name = js.Skill.Name
+            }).OrderBy(x => x.Name).ToList()
+        };
+    }
+
     public async Task<PagedResult<JobSummaryResponse>> GetMyJobsAsync(string recruiterId, JobStatus? status, int page, int pageSize)
     {
         // 1. Kiểm tra tham số phân trang (Quốc Feedback 1)
