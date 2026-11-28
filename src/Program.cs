@@ -105,6 +105,9 @@ builder.Services.AddProblemDetails();
 
 builder.Services.AddScoped<IJobService, JobService>();
 
+// SCRUM-193: Close Job
+builder.Services.AddScoped<CloseJobService>();
+
 var app = builder.Build();
 
 // ---- Middleware pipeline ----
