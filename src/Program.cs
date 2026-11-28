@@ -77,20 +77,37 @@ builder.Services.AddCors(options =>
 
 // --- CẤU HÌNH JWT AUTHENTICATION ---
 var jwtKey = builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("JWT Key is not configured.");
-builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+
+// --- CẤU HÌNH JWT AUTHENTICATION ---
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
+        // Đọc key khi JWT options được khởi tạo.
+        // Cho phép WebApplicationFactory cung cấp cấu hình test.
+        var jwtKey = builder.Configuration["Jwt:Key"];
+
+        if (string.IsNullOrWhiteSpace(jwtKey))
+        {
+            throw new InvalidOperationException(
+                "JWT Key is not configured.");
+        }
+
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
             ValidateAudience = true,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
+
             ValidIssuer = builder.Configuration["Jwt:Issuer"],
             ValidAudience = builder.Configuration["Jwt:Audience"],
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+
+            IssuerSigningKey = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes(jwtKey))
         };
     });
+
 
 // 2. CẤU HÌNH PHÂN QUYỀN POLICIES (Thêm mới)
 builder.Services.AddAuthorization(options =>
@@ -131,3 +148,9 @@ app.MapControllers();
 app.MapHealthChecks("/health");   // dùng cho kiểm tra hạ tầng / CI
 
 app.Run();
+
+// SCRUM-195: Expose the application entry point
+// for HTTP integration testing.
+public partial class Program
+{
+}
