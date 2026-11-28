@@ -10,7 +10,7 @@ using System.Text;
 using Microsoft.OpenApi.Models;
 using Recruitment.Api.Services.Auth;
 using Recruitment.Api.Services.Jobs;
-
+using Recruitment.Api.Services.Applications;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -104,6 +104,8 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddProblemDetails();
 
 builder.Services.AddScoped<IJobService, JobService>();
+// SCRUM-181: Application Tracking
+builder.Services.AddScoped<ApplicationService>();
 
 var app = builder.Build();
 

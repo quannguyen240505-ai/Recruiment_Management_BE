@@ -14,6 +14,7 @@ public class AppDbContext : DbContext
     public DbSet<Skill> Skills => Set<Skill>();
     public DbSet<Job> Jobs => Set<Job>();
     public DbSet<JobSkill> JobSkills => Set<JobSkill>();
+    public DbSet<Application> Applications => Set<Application>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -74,5 +75,33 @@ public class AppDbContext : DbContext
              .HasForeignKey(x => x.RoleId)
              .OnDelete(DeleteBehavior.Restrict);
         });
+
+        modelBuilder.Entity<Application>(e =>
+        {
+            e.ToTable("Applications");
+
+            e.HasKey(x => x.ApplicationId);
+
+            e.Property(x => x.Status)
+                .HasConversion<string>()
+                .HasMaxLength(30);
+
+            e.HasIndex(x => new
+            {
+                x.CandidateId,
+                x.JobId
+            }).IsUnique();
+
+            e.HasOne(x => x.Candidate)
+                .WithMany()
+                .HasForeignKey(x => x.CandidateId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            e.HasOne(x => x.Job)
+                .WithMany()
+                .HasForeignKey(x => x.JobId)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
     }
 }
